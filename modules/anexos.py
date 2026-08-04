@@ -28,6 +28,14 @@ def painel(conn, usuario, entidade, entidade_id, chave_ui=None, titulo=None):
     if titulo:
         st.markdown(f"**{titulo}**")
 
+    if storage.disco_efemero():
+        st.warning(
+            "**Anexos aqui são temporários.** O servidor gratuito apaga os arquivos "
+            "quando o app hiberna (12h sem uso). O lançamento e o valor continuam "
+            "salvos — só o arquivo some. Guarde o original no seu computador ou "
+            "celular até o armazenamento definitivo ficar pronto."
+        )
+
     enviados = st.file_uploader(
         "Adicionar arquivo",
         type=[e.lstrip(".") for e in sorted(storage.EXTENSOES_PERMITIDAS)],

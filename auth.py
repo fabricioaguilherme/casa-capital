@@ -67,6 +67,8 @@ def _enriquecer_com_grupo(conn, usuario):
         return None
     usuario["grupo_id"] = membro["grupo_id"]
     usuario["papel"] = membro["papel"]
+    grupo = db.buscar_grupo(conn, membro["grupo_id"])
+    usuario["grupo_nome"] = grupo["nome"] if grupo else None
     return usuario
 
 

@@ -18,6 +18,18 @@ from datetime import date
 BASE = os.path.dirname(os.path.abspath(__file__))
 PASTA_ANEXOS = os.path.join(BASE, "anexos")
 
+
+def disco_efemero():
+    """True quando o disco é apagado a cada reinício (Streamlit Community Cloud).
+
+    Lá o app roda a partir de /mount/src e hiberna após 12h sem uso; ao acordar,
+    a pasta de anexos volta vazia. As fichas continuam no banco e a tela mostra
+    "Arquivo ausente" — o dado não corrompe, mas o arquivo se perde. Enquanto
+    não houver um bucket de verdade (ver esqueleto de ArmazenamentoS3 no fim
+    deste arquivo), a tela de anexos avisa antes de o usuário confiar no upload.
+    """
+    return BASE.startswith("/mount/src")
+
 TAMANHO_MAX_MB = 15
 EXTENSOES_PERMITIDAS = {
     # imagens (foto de recibo, canhoto, comprovante)

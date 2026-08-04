@@ -5,7 +5,7 @@ import auth
 import theme
 from modules import (
     dashboard, contas, fluxo_caixa, contas_pagar_receber, cartao_credito,
-    dre, patrimonio, investimentos, metas, admin,
+    dre, patrimonio, investimentos, metas, admin, backup,
 )
 
 st.set_page_config(
@@ -339,6 +339,7 @@ PAGINAS = {
     "🏠  Patrimônio": ("Patrimônio", "Bens, dívidas e patrimônio líquido.", patrimonio.render),
     "💹  Investimentos": ("Investimentos", "Carteira, aportes e rentabilidade.", investimentos.render),
     "🎯  Metas": ("Metas", "Objetivos financeiros e progresso.", metas.render),
+    "💾  Backup": ("Backup", "Baixe uma cópia dos seus dados.", backup.render),
 }
 
 # Administração: visível somente para admins
