@@ -3,9 +3,9 @@
 Objetivo: a família acessa pelo seu domínio e o endereço `casa-capital.streamlit.app`
 nunca aparece.
 
-## Por que não basta o CNAME
+## Por que não bastava o CNAME
 
-O CNAME já existe e mesmo assim o navegador recusa a conexão:
+O CNAME sozinho não funciona — o navegador recusa a conexão:
 
 ```
 subject: CN=*.streamlitapp.com
@@ -13,33 +13,32 @@ subjectAltName does not match host name casacapital.fabricioguilherme.com
 ```
 
 O plano gratuito do Streamlit Cloud não emite certificado para domínio de
-terceiros. Nenhum ajuste de DNS resolve isso — o certificado tem que sair de
+terceiros. Nenhum ajuste de DNS resolve isso; o certificado tem que sair de
 outro lugar. O Worker é esse outro lugar.
 
 ---
 
-## Passo 1 — Apagar o CNAME antigo
+## Já feito
 
-No Cloudflare → **DNS** → **Records**, apague o registro `casacapital`
-(o CNAME que aponta para `casa-capital.streamlit.app`).
+- [x] CNAME antigo (`casacapital` → `casa-capital.streamlit.app`) removido
+- [x] Worker `casa-capital` criado
+- [x] Domínio `casacapital.fabricioguilherme.com` ligado ao Worker
+- [x] Certificado emitido e testado — `HTTP 200`
 
-Ele precisa sair antes: o Worker cria o próprio registro no passo 3 e o
-Cloudflare recusa se já houver outro com o mesmo nome.
+Enquanto o código do passo 1 abaixo não entrar, o endereço responde
+"Hello World!" (o exemplo que vem com o Worker).
 
-## Passo 2 — Criar o Worker
+## Falta fazer
 
-Cloudflare → **Workers & Pages** → **Create** → **Start with Hello World** →
-**Deploy**. Depois **Edit code**, apague o exemplo, cole o conteúdo de
-[`worker.js`](worker.js) e **Deploy** de novo.
+### 1. Colar o código do proxy
 
-## Passo 3 — Ligar o domínio ao Worker
+Painel do Worker → **Editar código**. Clique dentro do editor, `⌘A`, `⌘V`
+(o conteúdo de [`worker.js`](worker.js)) e **Implantar**.
 
-No Worker → **Settings** → **Domains & Routes** → **Add** → **Custom Domain** →
-`casacapital.fabricioguilherme.com`.
+> Esta é a única etapa que precisa ser feita à mão: o editor do Cloudflare roda
+> dentro de um iframe isolado, que não aceita teclado automatizado.
 
-O Cloudflare cria o DNS e emite o certificado sozinho (leva de 1 a 5 minutos).
-
-## Passo 4 — Autorizar o novo endereço no Google
+### 2. Autorizar o novo endereço no Google
 
 Google Cloud Console → **APIs e Serviços** → **Credenciais** → seu ID OAuth →
 **URIs de redirecionamento autorizados** → adicione:
@@ -51,7 +50,7 @@ https://casacapital.fabricioguilherme.com/oauth2callback
 **Não apague o endereço antigo** (`https://casa-capital.streamlit.app/oauth2callback`).
 Manter os dois permite voltar atrás na hora se o proxy der problema.
 
-## Passo 5 — Apontar o login para o novo endereço
+### 3. Apontar o login para o novo endereço
 
 Streamlit Cloud → seu app → **Settings** → **Secrets**, no bloco `[auth]`:
 
@@ -61,6 +60,12 @@ redirect_uri = "https://casacapital.fabricioguilherme.com/oauth2callback"
 
 Sem isto, o login com Google devolve o usuário para o endereço antigo e ele
 aparece na barra — exatamente o que se queria evitar.
+
+Aproveite e acrescente no bloco `[acesso]`, se ainda não estiver lá:
+
+```toml
+emails_super_admin = ["fabricioaguilherme@gmail.com"]
+```
 
 ---
 
@@ -79,6 +84,6 @@ contornar isso, mas o Streamlit Cloud pode barrar por outro caminho. Nesse caso
 o proxy não tem conserto do nosso lado e a saída é trocar de hospedagem
 (Google Cloud Run tem domínio próprio com suporte oficial e não hiberna).
 
-Para voltar ao estado anterior enquanto isso: desfaça o passo 5 e use
+Para voltar ao estado anterior enquanto isso: desfaça o passo 3 e use
 `casa-capital.streamlit.app` normalmente. Nada se perde — os dados estão no
 Turso, não na hospedagem.
