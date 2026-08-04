@@ -17,6 +17,28 @@
  */
 
 const UPSTREAM = "casa-capital.streamlit.app";
+const BOOTSTRAP = "share.streamlit.io";
+
+/**
+ * O Streamlit Cloud abre a sessão mandando o navegador ao share.streamlit.io,
+ * que assina um token amarrado ao domínio do app e devolve para /-/login.
+ * Esse endereço só aceita domínios .streamlit.app — com o nosso ele responde
+ * HTTP 500 (testado). A saída é fazer esse vaivém aqui dentro, usando o
+ * domínio que ele aceita, e entregar ao navegador só o cookie do fim da linha.
+ */
+async function abrirSessao(destino) {
+  const boot = new URL(destino);
+  boot.searchParams.set("redirect_uri", `https://${UPSTREAM}/`);
+
+  const r1 = await fetch(boot.toString(), { redirect: "manual" });
+  const paraLogin = r1.headers.get("Location");
+  if (!paraLogin) return null;
+
+  const r2 = await fetch(paraLogin, { redirect: "manual" });
+  const cookies =
+    typeof r2.headers.getSetCookie === "function" ? r2.headers.getSetCookie() : [];
+  return cookies.length ? cookies : null;
+}
 
 export default {
   async fetch(request) {
@@ -47,6 +69,21 @@ export default {
     // WebSocket: devolver a resposta como veio. Reconstruí-la perde a conexão.
     if (resposta.webSocket) {
       return resposta;
+    }
+
+    // Sessão ainda não aberta: resolver aqui e recarregar já com o cookie.
+    const destino = resposta.headers.get("Location");
+    if (destino && destino.includes(BOOTSTRAP)) {
+      const cookies = await abrirSessao(destino);
+      if (cookies) {
+        const saida = new Headers();
+        for (const cookie of cookies) {
+          saida.append("Set-Cookie", cookie.replace(/;\s*Domain=[^;]+/i, ""));
+        }
+        saida.set("Location", url.pathname + url.search);
+        saida.set("Cache-Control", "no-store");
+        return new Response(null, { status: 302, headers: saida });
+      }
     }
 
     const cabecalhos = new Headers(resposta.headers);
