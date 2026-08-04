@@ -8,7 +8,8 @@ from modules import anexos
 
 
 def render(conn, usuario):
-    contas = db.listar_contas(conn)
+    grupo_id = usuario["grupo_id"]
+    contas = db.listar_contas(conn, grupo_id=grupo_id)
     contas_nao_cartao = [c for c in contas if c["tipo"] != "cartao"]
     categorias = db.listar_categorias(conn)
 
@@ -65,6 +66,7 @@ def render(conn, usuario):
                     valor, tipo, status, usuario["id"],
                     recorrente=recorrente, repeticoes=int(repeticoes) if recorrente else 1,
                     forma_pagamento=None if forma == "—" else forma,
+                    grupo_id=grupo_id,
                 )
                 st.success("Lançamento salvo.")
                 st.rerun()
@@ -84,7 +86,7 @@ def render(conn, usuario):
 
     lancamentos = db.listar_lancamentos(
         conn, data_inicio=data_inicio.isoformat(), data_fim=data_fim.isoformat(),
-        conta_id=conta_id, apenas_sem_cartao=True,
+        conta_id=conta_id, apenas_sem_cartao=True, grupo_id=grupo_id,
     )
 
     if not lancamentos:

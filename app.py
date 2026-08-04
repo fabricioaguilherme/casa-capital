@@ -5,7 +5,7 @@ import auth
 import theme
 from modules import (
     dashboard, contas, fluxo_caixa, contas_pagar_receber, cartao_credito,
-    dre, patrimonio, investimentos, metas,
+    dre, patrimonio, investimentos, metas, admin,
 )
 
 st.set_page_config(
@@ -298,8 +298,34 @@ db.limpar_sessoes_expiradas(conn)
 usuario = auth.usuario_logado(conn)
 
 if not usuario:
-    auth.tela_login(conn)
+    # Distingue "não logado" de "logado mas sem grupo"
+    sem_grupo = st.session_state.pop("sem_grupo", None)
+    if sem_grupo:
+        _, centro, _ = st.columns([1, 1.5, 1])
+        with centro:
+            logo = theme.imagem_base64("logo.png")
+            st.markdown(
+                f"""<div class="login-topo">
+                <img class="login-logo" src="{logo}" alt="Casa Capital">
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            with st.container(border=True):
+                st.warning(
+                    f"**Você não tem acesso a nenhum grupo.**  \n"
+                    f"O e-mail **{theme.esc(sem_grupo)}** não está vinculado a nenhuma família.  \n"
+                    "Peça ao administrador para adicioná-lo na tela de Administração."
+                )
+                if st.button("Sair e tentar outra conta", use_container_width=True):
+                    st.logout()
+    else:
+        auth.tela_login(conn)
     st.stop()
+
+# Garante que o grupo_id está na sessão (pode faltar em sessões antigas)
+if not usuario.get("grupo_id"):
+    st.session_state.pop("usuario", None)
+    st.rerun()
 
 # ── Navegação lateral ────────────────────────────────────────────
 PAGINAS = {
@@ -314,6 +340,10 @@ PAGINAS = {
     "💹  Investimentos": ("Investimentos", "Carteira, aportes e rentabilidade.", investimentos.render),
     "🎯  Metas": ("Metas", "Objetivos financeiros e progresso.", metas.render),
 }
+
+# Administração: visível somente para admins
+if usuario.get("papel") == "admin":
+    PAGINAS["⚙️  Administração"] = ("Administração", "Gerenciar grupos e membros.", admin.render)
 
 with st.sidebar:
     st.markdown(

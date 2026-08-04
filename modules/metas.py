@@ -7,6 +7,7 @@ import theme
 
 
 def render(conn, usuario):
+    grupo_id = usuario["grupo_id"]
     st.markdown("#### ➕ Nova meta")
     with st.container(border=True):
         with st.form("nova_meta", clear_on_submit=True):
@@ -25,11 +26,11 @@ def render(conn, usuario):
             elif valor_alvo <= 0:
                 st.error("Informe um valor alvo maior que zero.")
             else:
-                db.criar_meta(conn, nome.strip(), valor_alvo, data_alvo.isoformat(), usuario["id"])
+                db.criar_meta(conn, nome.strip(), valor_alvo, data_alvo.isoformat(), usuario["id"], grupo_id=grupo_id)
                 st.success("Meta criada.")
                 st.rerun()
 
-    metas = db.listar_metas(conn)
+    metas = db.listar_metas(conn, grupo_id=grupo_id)
     if not metas:
         st.info("Nenhuma meta cadastrada ainda. Use o formulário acima.")
         return

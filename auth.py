@@ -4,6 +4,7 @@ import secrets
 
 import streamlit as st
 
+import conexao
 import database as db
 import theme
 
@@ -57,6 +58,18 @@ def _sessao_publica(registro):
     return {"id": registro["id"], "nome": registro["nome"], "login": registro["login"]}
 
 
+def _enriquecer_com_grupo(conn, usuario):
+    """Adiciona grupo_id e papel ao dict do usuário.
+    Retorna o próprio dict (modificado) se encontrado, ou None se sem grupo."""
+    email = usuario.get("login") or ""
+    membro = db.grupo_do_usuario(conn, email)
+    if not membro:
+        return None
+    usuario["grupo_id"] = membro["grupo_id"]
+    usuario["papel"] = membro["papel"]
+    return usuario
+
+
 # ── Login com Google (OIDC nativo do Streamlit) ──────────────────────────
 
 def google_configurado():
@@ -74,29 +87,53 @@ def _emails_autorizados():
         return []
 
 
+def e_super_admin(email):
+    """Dono do sistema: pode criar grupos e ver a lista de todos eles.
+
+    Ser 'admin' apenas dá poder dentro do próprio grupo. Sem essa separação,
+    o admin de uma família enxergaria o nome e os e-mails das outras famílias.
+    Lista vazia = ninguém é super admin (falha fechada, de propósito).
+    """
+    if not email:
+        return False
+    try:
+        donos = [e.strip().lower() for e in st.secrets["acesso"]["emails_super_admin"]]
+    except Exception:
+        return False
+    return email.strip().lower() in donos
+
+
 def _usuario_do_google(conn, info):
     """Casa a conta Google com um usuário do banco. Cria no primeiro acesso.
 
     Só e-mails da lista de autorizados passam — sem isso, qualquer conta
-    Google do mundo entraria no app.
+    Google do mundo entraria no app. Além disso, o e-mail precisa estar em
+    usuarios_grupo para receber um grupo_id.
     """
     email = (info.get("email") or "").lower()
     if not email or email not in _emails_autorizados():
         return None
 
+    # Garante que o registro de usuário existe
     registro = db.buscar_usuario_por_email(conn, email)
-    if registro:
-        return _sessao_publica(registro)
+    if not registro:
+        nome = info.get("name") or email.split("@")[0]
+        existente = db.buscar_usuario_por_login(conn, email)
+        if existente:
+            db.vincular_email(conn, existente["id"], email)
+            registro = db.buscar_usuario_por_email(conn, email)
+        else:
+            db.criar_usuario_google(conn, nome, email)
+            registro = db.buscar_usuario_por_email(conn, email)
 
-    # e-mail autorizado mas ainda sem usuário: vincula ao existente ou cria
-    nome = info.get("name") or email.split("@")[0]
-    existente = db.buscar_usuario_por_login(conn, email)
-    if existente:
-        db.vincular_email(conn, existente["id"], email)
-        return _sessao_publica(db.buscar_usuario_por_email(conn, email))
+    usuario = _sessao_publica(registro)
 
-    db.criar_usuario_google(conn, nome, email)
-    return _sessao_publica(db.buscar_usuario_por_email(conn, email))
+    # Verifica pertencimento a um grupo
+    enriquecido = _enriquecer_com_grupo(conn, usuario)
+    if enriquecido is None:
+        st.session_state["sem_grupo"] = email
+        return None
+    return enriquecido
 
 
 def _token_da_url():
@@ -142,6 +179,9 @@ def usuario_logado(conn=None):
         return None
 
     usuario = _sessao_publica(registro)
+    # Enriquece com grupo (o login para usuários Google é o próprio e-mail)
+    _enriquecer_com_grupo(conn, usuario)
+
     st.session_state["usuario"] = usuario
     st.session_state["sessao_token"] = token
     return usuario
@@ -219,6 +259,23 @@ def tela_login(conn):
                 if st.button("🔐  Entrar com Google", use_container_width=True, type="primary"):
                     st.login("google")
 
+            st.markdown(
+                '<div class="login-rodape">Acesso restrito aos membros da família.</div>',
+                unsafe_allow_html=True,
+            )
+            return None
+
+        # ── Modo nuvem sem Google configurado: bloqueio de segurança ──
+        # Nunca exibir formulário manual quando o app está rodando na nuvem
+        # (Turso presente = implantação remota). Qualquer pessoa com o link
+        # poderia criar um admin — risco crítico de segurança.
+        if conexao.modo() == "nuvem":
+            with st.container(border=True):
+                st.error(
+                    "⚠️ **Acesso bloqueado.** Esta versão online só aceita "
+                    "login via Google. Configure as credenciais OAuth nas "
+                    "Secrets do Streamlit Cloud para liberar o acesso."
+                )
             st.markdown(
                 '<div class="login-rodape">Acesso restrito aos membros da família.</div>',
                 unsafe_allow_html=True,

@@ -5,10 +5,12 @@ import streamlit as st
 import database as db
 import theme
 
+_br_data = theme.data_br
+
 
 def _formulario_nova(conn, usuario, tipo, rotulo_acao):
     """Formulário sempre visível para cadastrar uma conta a pagar/receber (lançamento pendente)."""
-    contas = [c for c in db.listar_contas(conn) if c["tipo"] != "cartao"]
+    contas = [c for c in db.listar_contas(conn, grupo_id=usuario["grupo_id"]) if c["tipo"] != "cartao"]
     if not contas:
         st.warning(
             "Cadastre uma conta bancária ou carteira na aba **🏦 Contas** para poder lançar."
@@ -73,6 +75,7 @@ def _formulario_nova(conn, usuario, tipo, rotulo_acao):
                     descricao.strip(), valor, tipo, "pendente", usuario["id"],
                     recorrente=(repetir > 1), repeticoes=int(repetir),
                     forma_pagamento=None if forma == "—" else forma,
+                    grupo_id=usuario["grupo_id"],
                 )
                 st.success(
                     f"Cadastrado: {descricao.strip()}"
@@ -81,12 +84,13 @@ def _formulario_nova(conn, usuario, tipo, rotulo_acao):
                 st.rerun()
 
 
-def _lista_pendentes(conn, tipo, titulo, vazio_msg):
+def _lista_pendentes(conn, usuario, tipo, titulo, vazio_msg):
     hoje = date.today()
+    grupo_id = usuario["grupo_id"]
 
     # Totais consideram TUDO em aberto, não só a janela do filtro
     todos = db.listar_lancamentos(
-        conn, status="pendente", tipo=tipo, apenas_sem_cartao=True,
+        conn, status="pendente", tipo=tipo, apenas_sem_cartao=True, grupo_id=grupo_id,
     )
     atrasados = [i for i in todos if i["data"] < hoje.isoformat()]
 
@@ -164,10 +168,10 @@ def _lista_pendentes(conn, tipo, titulo, vazio_msg):
 def render_a_pagar(conn, usuario):
     _formulario_nova(conn, usuario, "saida", "a pagar")
     st.divider()
-    _lista_pendentes(conn, "saida", "📤 Contas a Pagar", "Nenhuma conta a pagar pendente no período.")
+    _lista_pendentes(conn, usuario, "saida", "📤 Contas a Pagar", "Nenhuma conta a pagar pendente no período.")
 
 
 def render_a_receber(conn, usuario):
     _formulario_nova(conn, usuario, "entrada", "a receber")
     st.divider()
-    _lista_pendentes(conn, "entrada", "📥 Contas a Receber", "Nenhuma conta a receber pendente no período.")
+    _lista_pendentes(conn, usuario, "entrada", "📥 Contas a Receber", "Nenhuma conta a receber pendente no período.")

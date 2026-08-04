@@ -8,7 +8,8 @@ import theme
 
 
 def render(conn, usuario):
-    saldos = db.saldos_por_conta(conn)
+    grupo_id = usuario["grupo_id"]
+    saldos = db.saldos_por_conta(conn, grupo_id=grupo_id)
     contas_nao_cartao = [c for c in saldos if c["tipo"] != "cartao"]
 
     if not contas_nao_cartao:
@@ -33,11 +34,11 @@ def render(conn, usuario):
     saldo_total = sum(c["saldo"] for c in contas_nao_cartao)
     a_pagar = db.listar_lancamentos(
         conn, status="pendente", tipo="saida",
-        apenas_sem_cartao=True, data_fim=limite.isoformat(),
+        apenas_sem_cartao=True, data_fim=limite.isoformat(), grupo_id=grupo_id,
     )
     a_receber = db.listar_lancamentos(
         conn, status="pendente", tipo="entrada",
-        apenas_sem_cartao=True, data_fim=limite.isoformat(),
+        apenas_sem_cartao=True, data_fim=limite.isoformat(), grupo_id=grupo_id,
     )
     total_pagar = sum(l["valor"] for l in a_pagar)
     total_receber = sum(l["valor"] for l in a_receber)
@@ -71,11 +72,11 @@ def render(conn, usuario):
         )
 
     # ── Linha secundária: visão patrimonial ──────────────────────────────
-    total_investido = sum(i["valor_atual"] for i in db.listar_investimentos(conn))
-    patrimonio = db.patrimonio_liquido(conn, saldo_contas=saldo_total, investido=total_investido)
+    total_investido = sum(i["valor_atual"] for i in db.listar_investimentos(conn, grupo_id=grupo_id))
+    patrimonio = db.patrimonio_liquido(conn, saldo_contas=saldo_total, investido=total_investido, grupo_id=grupo_id)
     inicio_mes = hoje.replace(day=1)
     lancamentos_mes = db.listar_lancamentos(
-        conn, data_inicio=inicio_mes.isoformat(), data_fim=hoje.isoformat(),
+        conn, data_inicio=inicio_mes.isoformat(), data_fim=hoje.isoformat(), grupo_id=grupo_id,
     )
     entradas_mes = sum(l["valor"] for l in lancamentos_mes if l["tipo"] == "entrada")
     saidas_mes = sum(l["valor"] for l in lancamentos_mes if l["tipo"] == "saida")

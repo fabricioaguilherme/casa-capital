@@ -7,7 +7,8 @@ import theme
 
 
 def render(conn, usuario):
-    cartoes = db.listar_cartoes(conn)
+    grupo_id = usuario["grupo_id"]
+    cartoes = db.listar_cartoes(conn, grupo_id=grupo_id)
 
     st.markdown("#### ➕ Cadastrar cartão")
     with st.container(border=True):
@@ -25,7 +26,7 @@ def render(conn, usuario):
             if not nome.strip():
                 st.error("Informe o nome do cartão.")
             else:
-                db.criar_cartao(conn, nome.strip(), int(dia_fechamento), int(dia_vencimento), limite)
+                db.criar_cartao(conn, nome.strip(), int(dia_fechamento), int(dia_vencimento), limite, grupo_id=grupo_id)
                 st.success(f"Cartão '{nome.strip()}' cadastrado.")
                 st.rerun()
 
@@ -33,7 +34,7 @@ def render(conn, usuario):
         st.info("Nenhum cartão cadastrado ainda. Use o formulário acima.")
         return
 
-    contas_debito = [c for c in db.listar_contas(conn) if c["tipo"] != "cartao"]
+    contas_debito = [c for c in db.listar_contas(conn, grupo_id=grupo_id) if c["tipo"] != "cartao"]
     categorias_despesa = db.listar_categorias(conn, tipo="despesa")
 
     st.divider()
@@ -72,6 +73,7 @@ def render(conn, usuario):
                         descricao.strip(), valor_parcela, "saida", "pendente", usuario["id"],
                         cartao_id=cartao["id"], parcelas=int(parcelas),
                         forma_pagamento="Cartão de crédito",
+                        grupo_id=grupo_id,
                     )
                     st.success(
                         f"Compra lançada em {int(parcelas)}x de {theme.moeda(valor_parcela)}."

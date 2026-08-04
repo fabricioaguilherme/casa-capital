@@ -8,6 +8,7 @@ TIPOS_INVESTIMENTO = ["Renda Fixa", "Ações", "Fundos Imobiliários", "Fundos",
 
 
 def render(conn, usuario):
+    grupo_id = usuario["grupo_id"]
     st.markdown("#### ➕ Adicionar investimento")
     with st.container(border=True):
         with st.form("novo_investimento", clear_on_submit=True):
@@ -23,11 +24,11 @@ def render(conn, usuario):
             if not nome.strip():
                 st.error("Informe o nome do investimento.")
             else:
-                db.criar_investimento(conn, nome.strip(), tipo, valor_aportado, valor_atual, usuario["id"])
+                db.criar_investimento(conn, nome.strip(), tipo, valor_aportado, valor_atual, usuario["id"], grupo_id=grupo_id)
                 st.success("Investimento adicionado.")
                 st.rerun()
 
-    investimentos = db.listar_investimentos(conn)
+    investimentos = db.listar_investimentos(conn, grupo_id=grupo_id)
     if not investimentos:
         st.info("Nenhum investimento cadastrado ainda. Use o formulário acima.")
         return

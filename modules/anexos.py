@@ -60,6 +60,7 @@ def painel(conn, usuario, entidade, entidade_id, chave_ui=None, titulo=None):
             db.criar_anexo(
                 conn, entidade, entidade_id, arquivo.name, chave, backend.nome,
                 mime, len(dados), digest, usuario["id"],
+                grupo_id=usuario.get("grupo_id"),
             )
             novos += 1
 

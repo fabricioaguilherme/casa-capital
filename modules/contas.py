@@ -12,7 +12,8 @@ LABEL_TIPO = {
 
 
 def render(conn, usuario):
-    contas = db.listar_contas(conn, apenas_ativas=False)
+    grupo_id = usuario["grupo_id"]
+    contas = db.listar_contas(conn, apenas_ativas=False, grupo_id=grupo_id)
 
     st.markdown("#### ➕ Nova conta")
     with st.form("nova_conta_gestao", clear_on_submit=True):
@@ -30,12 +31,12 @@ def render(conn, usuario):
             st.error("Informe o nome da conta.")
         else:
             if tipo == "cartao":
-                db.criar_cartao(conn, nome.strip(), 25, 5, 0.0)
+                db.criar_cartao(conn, nome.strip(), 25, 5, 0.0, grupo_id=grupo_id)
                 st.success(
                     f"Cartão '{nome.strip()}' criado. Ajuste fechamento, vencimento e limite na aba Cartão."
                 )
             else:
-                db.criar_conta(conn, nome.strip(), tipo, saldo_inicial)
+                db.criar_conta(conn, nome.strip(), tipo, saldo_inicial, grupo_id=grupo_id)
                 st.success(f"Conta '{nome.strip()}' criada.")
             st.rerun()
 

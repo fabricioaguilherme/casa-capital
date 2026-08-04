@@ -17,6 +17,7 @@ VISOES = {
 
 
 def render(conn, usuario):
+    grupo_id = usuario["grupo_id"]
     col1, col2, col3 = st.columns([1.3, 1.9, 1])
     with col1:
         meses_atras = st.slider("Meses para analisar", 1, 24, 6)
@@ -37,6 +38,7 @@ def render(conn, usuario):
         data_inicio=data_inicio.isoformat(),
         data_fim=None if futuros else fim_mes_atual.isoformat(),
         status=VISOES[visao],
+        grupo_id=grupo_id,
     )
 
     if not lancamentos:

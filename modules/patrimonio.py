@@ -9,6 +9,7 @@ CATEGORIAS_PASSIVO = ["Financiamento", "Empréstimo", "Cartão (dívida)", "Outr
 
 
 def render(conn, usuario):
+    grupo_id = usuario["grupo_id"]
     st.markdown("#### ➕ Adicionar bem ou dívida")
     with st.container(border=True):
         tipo = st.radio("Tipo", ["ativo", "passivo"], format_func=lambda t: "Ativo (bem)" if t == "ativo" else "Passivo (dívida)", horizontal=True, key="pat_tipo")
@@ -24,18 +25,18 @@ def render(conn, usuario):
             if not nome.strip():
                 st.error("Informe o nome do item.")
             else:
-                db.criar_patrimonio_item(conn, nome.strip(), tipo, categoria, valor, usuario["id"])
+                db.criar_patrimonio_item(conn, nome.strip(), tipo, categoria, valor, usuario["id"], grupo_id=grupo_id)
                 st.success("Item adicionado.")
                 st.rerun()
 
-    itens = db.listar_patrimonio(conn)
+    itens = db.listar_patrimonio(conn, grupo_id=grupo_id)
     ativos = [i for i in itens if i["tipo"] == "ativo"]
     passivos = [i for i in itens if i["tipo"] == "passivo"]
 
     total_ativos = sum(i["valor_atual"] for i in ativos)
     total_passivos = sum(i["valor_atual"] for i in passivos)
-    saldo_contas = db.saldo_total(conn)
-    total_investido = sum(i["valor_atual"] for i in db.listar_investimentos(conn))
+    saldo_contas = db.saldo_total(conn, grupo_id=grupo_id)
+    total_investido = sum(i["valor_atual"] for i in db.listar_investimentos(conn, grupo_id=grupo_id))
     patrimonio_liquido = total_ativos + total_investido + saldo_contas - total_passivos
 
     m1, m2, m3, m4 = st.columns(4)

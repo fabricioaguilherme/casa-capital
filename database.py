@@ -21,6 +21,19 @@ def get_connection():
 
 def init_db(conn):
     conn.executescript("""
+    CREATE TABLE IF NOT EXISTS grupos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        criado_em TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS usuarios_grupo (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        grupo_id INTEGER NOT NULL REFERENCES grupos(id),
+        user_email TEXT NOT NULL,
+        papel TEXT NOT NULL DEFAULT 'membro'
+    );
+
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL,
@@ -42,7 +55,8 @@ def init_db(conn):
         tipo TEXT NOT NULL CHECK (tipo IN ('banco', 'carteira', 'cartao')),
         saldo_inicial REAL NOT NULL DEFAULT 0,
         cor TEXT DEFAULT '#6366f1',
-        ativo INTEGER NOT NULL DEFAULT 1
+        ativo INTEGER NOT NULL DEFAULT 1,
+        grupo_id INTEGER REFERENCES grupos(id)
     );
 
     CREATE TABLE IF NOT EXISTS cartoes (
@@ -71,6 +85,7 @@ def init_db(conn):
         tipo TEXT NOT NULL CHECK (tipo IN ('entrada', 'saida')),
         status TEXT NOT NULL CHECK (status IN ('pago', 'pendente')) DEFAULT 'pendente',
         usuario_id INTEGER REFERENCES usuarios(id),
+        grupo_id INTEGER REFERENCES grupos(id),
         cartao_id INTEGER REFERENCES cartoes(id),
         compra_id TEXT,
         parcela_atual INTEGER DEFAULT 1,
@@ -87,7 +102,8 @@ def init_db(conn):
         categoria TEXT NOT NULL,
         valor_atual REAL NOT NULL,
         data_atualizacao TEXT NOT NULL,
-        usuario_id INTEGER REFERENCES usuarios(id)
+        usuario_id INTEGER REFERENCES usuarios(id),
+        grupo_id INTEGER REFERENCES grupos(id)
     );
 
     CREATE TABLE IF NOT EXISTS investimentos (
@@ -97,7 +113,8 @@ def init_db(conn):
         valor_aportado REAL NOT NULL,
         valor_atual REAL NOT NULL,
         data TEXT NOT NULL,
-        usuario_id INTEGER REFERENCES usuarios(id)
+        usuario_id INTEGER REFERENCES usuarios(id),
+        grupo_id INTEGER REFERENCES grupos(id)
     );
 
     -- Anexos: só a FICHA do arquivo. O binário fica no disco (ver storage.py),
@@ -114,6 +131,7 @@ def init_db(conn):
         tamanho INTEGER NOT NULL DEFAULT 0,
         hash_sha256 TEXT,
         usuario_id INTEGER REFERENCES usuarios(id),
+        grupo_id INTEGER REFERENCES grupos(id),
         created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -123,7 +141,8 @@ def init_db(conn):
         valor_alvo REAL NOT NULL,
         data_alvo TEXT,
         valor_atual REAL NOT NULL DEFAULT 0,
-        usuario_id INTEGER REFERENCES usuarios(id)
+        usuario_id INTEGER REFERENCES usuarios(id),
+        grupo_id INTEGER REFERENCES grupos(id)
     );
     """)
     conn.commit()
@@ -140,13 +159,33 @@ def _migrar_schema(conn):
     cols_usuarios = [c["name"] for c in conn.execute("PRAGMA table_info(usuarios)").fetchall()]
     if "email" not in cols_usuarios:
         conn.execute("ALTER TABLE usuarios ADD COLUMN email TEXT")
+
+    # Multi-tenancy: adiciona grupo_id às tabelas de dados
+    _add_column_if_missing(conn, "contas", "grupo_id", "INTEGER REFERENCES grupos(id)")
+    _add_column_if_missing(conn, "lancamentos", "grupo_id", "INTEGER REFERENCES grupos(id)")
+    _add_column_if_missing(conn, "patrimonio_itens", "grupo_id", "INTEGER REFERENCES grupos(id)")
+    _add_column_if_missing(conn, "investimentos", "grupo_id", "INTEGER REFERENCES grupos(id)")
+    _add_column_if_missing(conn, "metas", "grupo_id", "INTEGER REFERENCES grupos(id)")
+    _add_column_if_missing(conn, "anexos", "grupo_id", "INTEGER REFERENCES grupos(id)")
+
     conn.executescript("""
     CREATE INDEX IF NOT EXISTS idx_lanc_data ON lancamentos(data);
     CREATE INDEX IF NOT EXISTS idx_lanc_status ON lancamentos(status);
     CREATE INDEX IF NOT EXISTS idx_lanc_conta ON lancamentos(conta_id);
+    CREATE INDEX IF NOT EXISTS idx_lanc_grupo ON lancamentos(grupo_id);
+    CREATE INDEX IF NOT EXISTS idx_contas_grupo ON contas(grupo_id);
     CREATE INDEX IF NOT EXISTS idx_anexos_entidade ON anexos(entidade, entidade_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_grupo_unique ON usuarios_grupo(grupo_id, user_email);
     """)
     conn.commit()
+
+
+def _add_column_if_missing(conn, tabela, coluna, definicao):
+    """ALTER TABLE seguro — sem erro se a coluna já existir."""
+    cols = [c["name"] for c in conn.execute(f"PRAGMA table_info({tabela})").fetchall()]
+    if coluna not in cols:
+        conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao}")
+        conn.commit()
 
 
 def _seed_categorias(conn):
@@ -164,6 +203,66 @@ def _seed_categorias(conn):
     ]
     conn.executemany(
         "INSERT INTO categorias (nome, tipo, icone) VALUES (?, ?, ?)", padrao
+    )
+    conn.commit()
+
+
+# ── Grupos (multi-tenancy) ────────────────────────────────────────────────
+
+def listar_grupos(conn):
+    return conn.execute("SELECT * FROM grupos ORDER BY criado_em").fetchall()
+
+
+def criar_grupo(conn, nome):
+    cur = conn.execute("INSERT INTO grupos (nome) VALUES (?)", (nome,))
+    conn.commit()
+    return cur.lastrowid
+
+
+def buscar_grupo(conn, grupo_id):
+    return conn.execute("SELECT * FROM grupos WHERE id = ?", (grupo_id,)).fetchone()
+
+
+def renomear_grupo(conn, grupo_id, novo_nome):
+    conn.execute("UPDATE grupos SET nome = ? WHERE id = ?", (novo_nome, grupo_id))
+    conn.commit()
+
+
+def grupo_do_usuario(conn, email):
+    """Retorna o primeiro registro de usuarios_grupo para o e-mail, ou None."""
+    return conn.execute(
+        "SELECT * FROM usuarios_grupo WHERE lower(user_email) = lower(?) LIMIT 1",
+        (email,),
+    ).fetchone()
+
+
+def listar_membros_grupo(conn, grupo_id):
+    return conn.execute(
+        "SELECT * FROM usuarios_grupo WHERE grupo_id = ? ORDER BY papel DESC, user_email",
+        (grupo_id,),
+    ).fetchall()
+
+
+def adicionar_membro_grupo(conn, grupo_id, email, papel="membro"):
+    """Insere membro; ignora se o e-mail já pertencer ao grupo."""
+    existente = conn.execute(
+        "SELECT id FROM usuarios_grupo WHERE grupo_id = ? AND lower(user_email) = lower(?)",
+        (grupo_id, email),
+    ).fetchone()
+    if existente:
+        return False
+    conn.execute(
+        "INSERT INTO usuarios_grupo (grupo_id, user_email, papel) VALUES (?, ?, ?)",
+        (grupo_id, email.lower(), papel),
+    )
+    conn.commit()
+    return True
+
+
+def remover_membro_grupo(conn, grupo_id, email):
+    conn.execute(
+        "DELETE FROM usuarios_grupo WHERE grupo_id = ? AND lower(user_email) = lower(?)",
+        (grupo_id, email),
     )
     conn.commit()
 
@@ -266,18 +365,25 @@ def limpar_sessoes_expiradas(conn):
 
 # ── Contas ───────────────────────────────────────────────────────────────
 
-def listar_contas(conn, apenas_ativas=True):
-    q = "SELECT * FROM contas"
+def listar_contas(conn, apenas_ativas=True, grupo_id=None):
+    params = []
+    filtros = []
     if apenas_ativas:
-        q += " WHERE ativo = 1"
+        filtros.append("ativo = 1")
+    if grupo_id is not None:
+        filtros.append("grupo_id = ?")
+        params.append(grupo_id)
+    q = "SELECT * FROM contas"
+    if filtros:
+        q += " WHERE " + " AND ".join(filtros)
     q += " ORDER BY nome"
-    return conn.execute(q).fetchall()
+    return conn.execute(q, params).fetchall()
 
 
-def criar_conta(conn, nome, tipo, saldo_inicial, cor="#6366f1"):
+def criar_conta(conn, nome, tipo, saldo_inicial, cor="#6366f1", grupo_id=None):
     cur = conn.execute(
-        "INSERT INTO contas (nome, tipo, saldo_inicial, cor) VALUES (?, ?, ?, ?)",
-        (nome, tipo, saldo_inicial, cor),
+        "INSERT INTO contas (nome, tipo, saldo_inicial, cor, grupo_id) VALUES (?, ?, ?, ?, ?)",
+        (nome, tipo, saldo_inicial, cor, grupo_id),
     )
     conn.commit()
     return cur.lastrowid
@@ -330,18 +436,21 @@ def deletar_conta(conn, conta_id, apagar_lancamentos=False):
     conn.commit()
 
 
-def saldos_por_conta(conn):
+def saldos_por_conta(conn, grupo_id=None):
     """Saldo atual de todas as contas ativas em UMA consulta (evita N+1)."""
+    filtro_grupo = "AND contas.grupo_id = ?" if grupo_id is not None else ""
+    params = [grupo_id] if grupo_id is not None else []
     linhas = conn.execute(
-        """SELECT contas.id, contas.nome, contas.tipo, contas.saldo_inicial,
+        f"""SELECT contas.id, contas.nome, contas.tipo, contas.saldo_inicial,
                   COALESCE(SUM(CASE WHEN l.status = 'pago'
                        THEN CASE WHEN l.tipo = 'entrada' THEN l.valor ELSE -l.valor END
                        ELSE 0 END), 0) AS movimentos
            FROM contas
            LEFT JOIN lancamentos l ON l.conta_id = contas.id
-           WHERE contas.ativo = 1
+           WHERE contas.ativo = 1 {filtro_grupo}
            GROUP BY contas.id
-           ORDER BY contas.nome"""
+           ORDER BY contas.nome""",
+        params,
     ).fetchall()
     for linha in linhas:
         linha["saldo"] = linha["saldo_inicial"] + linha["movimentos"]
@@ -360,21 +469,28 @@ def saldo_atual_conta(conn, conta_id):
     return conta["saldo_inicial"] + movimentos
 
 
-def saldo_total(conn):
-    return sum(c["saldo"] for c in saldos_por_conta(conn) if c["tipo"] != "cartao")
+def saldo_total(conn, grupo_id=None):
+    return sum(c["saldo"] for c in saldos_por_conta(conn, grupo_id=grupo_id) if c["tipo"] != "cartao")
 
 
 # ── Cartões ──────────────────────────────────────────────────────────────
 
-def listar_cartoes(conn):
+def listar_cartoes(conn, grupo_id=None):
+    if grupo_id is not None:
+        return conn.execute(
+            """SELECT cartoes.*, contas.nome as nome_conta FROM cartoes
+               JOIN contas ON contas.id = cartoes.conta_id
+               WHERE contas.grupo_id = ? ORDER BY contas.nome""",
+            (grupo_id,),
+        ).fetchall()
     return conn.execute(
         """SELECT cartoes.*, contas.nome as nome_conta FROM cartoes
            JOIN contas ON contas.id = cartoes.conta_id ORDER BY contas.nome"""
     ).fetchall()
 
 
-def criar_cartao(conn, nome, dia_fechamento, dia_vencimento, limite):
-    conta_id = criar_conta(conn, nome, "cartao", 0)
+def criar_cartao(conn, nome, dia_fechamento, dia_vencimento, limite, grupo_id=None):
+    conta_id = criar_conta(conn, nome, "cartao", 0, grupo_id=grupo_id)
     cur = conn.execute(
         "INSERT INTO cartoes (conta_id, dia_fechamento, dia_vencimento, limite) VALUES (?, ?, ?, ?)",
         (conta_id, dia_fechamento, dia_vencimento, limite),
@@ -416,7 +532,7 @@ def criar_categoria(conn, nome, tipo, icone="💰"):
 def criar_lancamento(
     conn, data_lanc, conta_id, categoria_id, descricao, valor, tipo, status,
     usuario_id, cartao_id=None, parcelas=1, recorrente=False, repeticoes=1,
-    forma_pagamento=None,
+    forma_pagamento=None, grupo_id=None,
 ):
     """Cria um lançamento simples, parcelado (cartão) ou recorrente (mensal).
     Parcelamento e recorrência são mutuamente exclusivos por lançamento."""
@@ -429,13 +545,13 @@ def criar_lancamento(
             conn.execute(
                 """INSERT INTO lancamentos
                    (data, conta_id, categoria_id, descricao, valor, tipo, status,
-                    usuario_id, cartao_id, compra_id, parcela_atual, parcela_total, forma_pagamento)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    usuario_id, grupo_id, cartao_id, compra_id, parcela_atual, parcela_total, forma_pagamento)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     data_parcela.isoformat(), conta_id, categoria_id,
                     f"{descricao} ({i + 1}/{parcelas})", valor, tipo,
                     "pago" if i == 0 and status == "pago" else "pendente",
-                    usuario_id, cartao_id, compra_id, i + 1, parcelas, forma_pagamento,
+                    usuario_id, grupo_id, cartao_id, compra_id, i + 1, parcelas, forma_pagamento,
                 ),
             )
     elif recorrente and repeticoes > 1:
@@ -445,28 +561,28 @@ def criar_lancamento(
             conn.execute(
                 """INSERT INTO lancamentos
                    (data, conta_id, categoria_id, descricao, valor, tipo, status,
-                    usuario_id, recorrencia_id, forma_pagamento)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    usuario_id, grupo_id, recorrencia_id, forma_pagamento)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     data_ocorrencia.isoformat(), conta_id, categoria_id, descricao,
                     valor, tipo, status if i == 0 else "pendente",
-                    usuario_id, recorrencia_id, forma_pagamento,
+                    usuario_id, grupo_id, recorrencia_id, forma_pagamento,
                 ),
             )
     else:
         conn.execute(
             """INSERT INTO lancamentos
                (data, conta_id, categoria_id, descricao, valor, tipo, status,
-                usuario_id, cartao_id, forma_pagamento)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                usuario_id, grupo_id, cartao_id, forma_pagamento)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (data_lanc, conta_id, categoria_id, descricao, valor, tipo, status,
-             usuario_id, cartao_id, forma_pagamento),
+             usuario_id, grupo_id, cartao_id, forma_pagamento),
         )
     conn.commit()
 
 
 def listar_lancamentos(conn, data_inicio=None, data_fim=None, status=None, conta_id=None,
-                        categoria_id=None, tipo=None, apenas_sem_cartao=False):
+                        categoria_id=None, tipo=None, apenas_sem_cartao=False, grupo_id=None):
     q = """SELECT lancamentos.*, contas.nome as nome_conta, categorias.nome as nome_categoria,
                   categorias.icone as icone_categoria
            FROM lancamentos
@@ -474,6 +590,9 @@ def listar_lancamentos(conn, data_inicio=None, data_fim=None, status=None, conta
            JOIN categorias ON categorias.id = lancamentos.categoria_id
            WHERE 1=1"""
     params = []
+    if grupo_id is not None:
+        q += " AND lancamentos.grupo_id = ?"
+        params.append(grupo_id)
     if data_inicio:
         q += " AND data >= ?"
         params.append(data_inicio)
@@ -531,15 +650,20 @@ def deletar_lancamento(conn, lancamento_id, apenas_futuras=False):
 
 # ── Patrimônio ───────────────────────────────────────────────────────────
 
-def listar_patrimonio(conn):
+def listar_patrimonio(conn, grupo_id=None):
+    if grupo_id is not None:
+        return conn.execute(
+            "SELECT * FROM patrimonio_itens WHERE grupo_id = ? ORDER BY tipo, categoria",
+            (grupo_id,),
+        ).fetchall()
     return conn.execute("SELECT * FROM patrimonio_itens ORDER BY tipo, categoria").fetchall()
 
 
-def criar_patrimonio_item(conn, nome, tipo, categoria, valor_atual, usuario_id):
+def criar_patrimonio_item(conn, nome, tipo, categoria, valor_atual, usuario_id, grupo_id=None):
     conn.execute(
-        """INSERT INTO patrimonio_itens (nome, tipo, categoria, valor_atual, data_atualizacao, usuario_id)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (nome, tipo, categoria, valor_atual, date.today().isoformat(), usuario_id),
+        """INSERT INTO patrimonio_itens (nome, tipo, categoria, valor_atual, data_atualizacao, usuario_id, grupo_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (nome, tipo, categoria, valor_atual, date.today().isoformat(), usuario_id, grupo_id),
     )
     conn.commit()
 
@@ -557,29 +681,34 @@ def deletar_patrimonio_item(conn, item_id):
     conn.commit()
 
 
-def patrimonio_liquido(conn, saldo_contas=None, investido=None):
+def patrimonio_liquido(conn, saldo_contas=None, investido=None, grupo_id=None):
     """Aceita valores pré-calculados para evitar repetir consultas na mesma tela."""
-    itens = listar_patrimonio(conn)
+    itens = listar_patrimonio(conn, grupo_id=grupo_id)
     ativos = sum(i["valor_atual"] for i in itens if i["tipo"] == "ativo")
     passivos = sum(i["valor_atual"] for i in itens if i["tipo"] == "passivo")
     if investido is None:
-        investido = sum(i["valor_atual"] for i in listar_investimentos(conn))
+        investido = sum(i["valor_atual"] for i in listar_investimentos(conn, grupo_id=grupo_id))
     if saldo_contas is None:
-        saldo_contas = saldo_total(conn)
+        saldo_contas = saldo_total(conn, grupo_id=grupo_id)
     return ativos + investido - passivos + saldo_contas
 
 
 # ── Investimentos ────────────────────────────────────────────────────────
 
-def listar_investimentos(conn):
+def listar_investimentos(conn, grupo_id=None):
+    if grupo_id is not None:
+        return conn.execute(
+            "SELECT * FROM investimentos WHERE grupo_id = ? ORDER BY tipo, nome",
+            (grupo_id,),
+        ).fetchall()
     return conn.execute("SELECT * FROM investimentos ORDER BY tipo, nome").fetchall()
 
 
-def criar_investimento(conn, nome, tipo, valor_aportado, valor_atual, usuario_id):
+def criar_investimento(conn, nome, tipo, valor_aportado, valor_atual, usuario_id, grupo_id=None):
     conn.execute(
-        """INSERT INTO investimentos (nome, tipo, valor_aportado, valor_atual, data, usuario_id)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (nome, tipo, valor_aportado, valor_atual, date.today().isoformat(), usuario_id),
+        """INSERT INTO investimentos (nome, tipo, valor_aportado, valor_atual, data, usuario_id, grupo_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (nome, tipo, valor_aportado, valor_atual, date.today().isoformat(), usuario_id, grupo_id),
     )
     conn.commit()
 
@@ -596,14 +725,19 @@ def deletar_investimento(conn, inv_id):
 
 # ── Metas ────────────────────────────────────────────────────────────────
 
-def listar_metas(conn):
+def listar_metas(conn, grupo_id=None):
+    if grupo_id is not None:
+        return conn.execute(
+            "SELECT * FROM metas WHERE grupo_id = ? ORDER BY data_alvo",
+            (grupo_id,),
+        ).fetchall()
     return conn.execute("SELECT * FROM metas ORDER BY data_alvo").fetchall()
 
 
-def criar_meta(conn, nome, valor_alvo, data_alvo, usuario_id):
+def criar_meta(conn, nome, valor_alvo, data_alvo, usuario_id, grupo_id=None):
     conn.execute(
-        "INSERT INTO metas (nome, valor_alvo, data_alvo, usuario_id) VALUES (?, ?, ?, ?)",
-        (nome, valor_alvo, data_alvo, usuario_id),
+        "INSERT INTO metas (nome, valor_alvo, data_alvo, usuario_id, grupo_id) VALUES (?, ?, ?, ?, ?)",
+        (nome, valor_alvo, data_alvo, usuario_id, grupo_id),
     )
     conn.commit()
 
@@ -624,14 +758,14 @@ def deletar_meta(conn, meta_id):
 # no restante do aplicativo.
 
 def criar_anexo(conn, entidade, entidade_id, nome_original, chave, backend,
-                mime, tamanho, hash_sha256, usuario_id):
+                mime, tamanho, hash_sha256, usuario_id, grupo_id=None):
     cur = conn.execute(
         """INSERT INTO anexos
            (entidade, entidade_id, nome_original, chave, backend, mime,
-            tamanho, hash_sha256, usuario_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            tamanho, hash_sha256, usuario_id, grupo_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (entidade, entidade_id, nome_original, chave, backend, mime,
-         tamanho, hash_sha256, usuario_id),
+         tamanho, hash_sha256, usuario_id, grupo_id),
     )
     conn.commit()
     return cur.lastrowid
