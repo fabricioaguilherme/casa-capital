@@ -18,54 +18,42 @@ outro lugar. O Worker é esse outro lugar.
 
 ---
 
-## Já feito
+## Estado: no ar
 
-- [x] CNAME antigo (`casacapital` → `casa-capital.streamlit.app`) removido
-- [x] Worker `casa-capital` criado
-- [x] Domínio `casacapital.fabricioguilherme.com` ligado ao Worker
-- [x] Certificado emitido e testado — `HTTP 200`
+- [x] CNAME antigo removido
+- [x] Worker `casa-capital` criado e código do proxy implantado
+- [x] Domínio ligado ao Worker, certificado emitido
+- [x] `redirect_uri` do Google apontando para o domínio próprio
+- [x] Testado de fora: `302 → / → 200`, e zero ocorrências do endereço antigo
+      no HTML servido
 
-Enquanto o código do passo 1 abaixo não entrar, o endereço responde
-"Hello World!" (o exemplo que vem com o Worker).
+## A pedra do caminho: o bootstrap de sessão
 
-## Falta fazer
+O Streamlit Cloud abre a sessão mandando o navegador ao `share.streamlit.io`,
+que assina um token **amarrado ao domínio do app**. Esse endereço recusa
+domínio de fora:
 
-### 1. Colar o código do proxy
+| `redirect_uri` enviado | resposta |
+|---|---|
+| `casa-capital.streamlit.app` | 303 (segue) |
+| `casacapital.fabricioguilherme.com` | **500** |
 
-Painel do Worker → **Editar código**. Clique dentro do editor, `⌘A`, `⌘V`
-(o conteúdo de [`worker.js`](worker.js)) e **Implantar**.
+Por isso o Worker faz esse vaivém no servidor (`abrirSessao`), usando o domínio
+que o Streamlit aceita, e entrega ao navegador só o cookie do fim da linha. O
+navegador nunca sai do domínio próprio.
 
-> Esta é a única etapa que precisa ser feita à mão: o editor do Cloudflare roda
-> dentro de um iframe isolado, que não aceita teclado automatizado.
+Se um dia o proxy parar de funcionar, é aqui que se olha primeiro — essa parte
+depende de um comportamento do Streamlit Cloud que eles podem mudar sem aviso.
 
-### 2. Autorizar o novo endereço no Google
+## Manutenção
 
-Google Cloud Console → **APIs e Serviços** → **Credenciais** → seu ID OAuth →
-**URIs de redirecionamento autorizados** → adicione:
+O editor do Cloudflare roda dentro de um iframe isolado que não aceita teclado
+automatizado: para atualizar o Worker é `⌘A` / `⌘V` à mão no painel, colando o
+conteúdo de [`worker.js`](worker.js).
 
-```
-https://casacapital.fabricioguilherme.com/oauth2callback
-```
-
-**Não apague o endereço antigo** (`https://casa-capital.streamlit.app/oauth2callback`).
-Manter os dois permite voltar atrás na hora se o proxy der problema.
-
-### 3. Apontar o login para o novo endereço
-
-Streamlit Cloud → seu app → **Settings** → **Secrets**, no bloco `[auth]`:
-
-```toml
-redirect_uri = "https://casacapital.fabricioguilherme.com/oauth2callback"
-```
-
-Sem isto, o login com Google devolve o usuário para o endereço antigo e ele
-aparece na barra — exatamente o que se queria evitar.
-
-Aproveite e acrescente no bloco `[acesso]`, se ainda não estiver lá:
-
-```toml
-emails_super_admin = ["fabricioaguilherme@gmail.com"]
-```
+Mantenha `https://casa-capital.streamlit.app/oauth2callback` na lista de URIs
+autorizados do Google. É o que permite voltar ao endereço antigo na hora, se o
+proxy quebrar.
 
 ---
 
