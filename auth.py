@@ -105,15 +105,88 @@ def e_super_admin(email):
     return email.strip().lower() in donos
 
 
+# ── Restrição por rede ───────────────────────────────────────────────────
+# Alguns usuários só podem entrar de casa. Quem manda o IP verdadeiro é o
+# Cloudflare, no cabeçalho CF-Connecting-IP; os outros nomes são para quando o
+# app é acessado direto pelo endereço do Streamlit, sem passar pelo proxy.
+CABECALHOS_DE_IP = ("Cf-Connecting-Ip", "X-Real-Ip", "X-Forwarded-For")
+
+
+def ip_do_cliente():
+    """IP de quem está acessando, ou None se não der para descobrir."""
+    try:
+        cabecalhos = st.context.headers or {}
+    except Exception:
+        return None
+    for nome in CABECALHOS_DE_IP:
+        valor = cabecalhos.get(nome) or cabecalhos.get(nome.lower())
+        if valor:
+            # X-Forwarded-For vem como "cliente, proxy1, proxy2"
+            return valor.split(",")[0].strip()
+    return None
+
+
+def _redes_liberadas():
+    """Faixas de IP consideradas 'de casa'. Vazio = nenhuma."""
+    try:
+        return [str(r).strip() for r in st.secrets["acesso"]["redes_liberadas"] if str(r).strip()]
+    except Exception:
+        return []
+
+
+def _emails_de_qualquer_rede():
+    """Quem pode entrar de qualquer lugar (você e sua esposa)."""
+    try:
+        return [e.strip().lower() for e in st.secrets["acesso"]["emails_qualquer_rede"]]
+    except Exception:
+        return []
+
+
+def rede_permitida(email):
+    """(permitido, ip_visto). Quem não está na lista livre só entra de casa.
+
+    Falha fechada de propósito: sem conseguir ler o IP, ou sem nenhuma rede
+    configurada, o usuário restrito não entra. Preferível a liberar por engano
+    justamente quem se quis limitar.
+    """
+    ip = ip_do_cliente()
+    if (email or "").strip().lower() in _emails_de_qualquer_rede():
+        return True, ip
+
+    redes = _redes_liberadas()
+    if not redes or not ip:
+        return False, ip
+
+    try:
+        import ipaddress
+        endereco = ipaddress.ip_address(ip)
+    except ValueError:
+        return False, ip
+
+    for rede in redes:
+        try:
+            # aceita tanto "189.4.5.6" quanto "189.4.5.0/24"
+            if endereco in ipaddress.ip_network(rede, strict=False):
+                return True, ip
+        except ValueError:
+            continue
+    return False, ip
+
+
 def _usuario_do_google(conn, info):
     """Casa a conta Google com um usuário do banco. Cria no primeiro acesso.
 
     Só e-mails da lista de autorizados passam — sem isso, qualquer conta
     Google do mundo entraria no app. Além disso, o e-mail precisa estar em
-    usuarios_grupo para receber um grupo_id.
+    usuarios_grupo para receber um grupo_id, e passar na restrição de rede.
     """
     email = (info.get("email") or "").lower()
     if not email or email not in _emails_autorizados():
+        return None
+
+    liberado, ip = rede_permitida(email)
+    if not liberado:
+        st.session_state["rede_bloqueada"] = {"email": email, "ip": ip}
         return None
 
     # Garante que o registro de usuário existe

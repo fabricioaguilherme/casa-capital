@@ -297,27 +297,43 @@ db.limpar_sessoes_expiradas(conn)
 
 usuario = auth.usuario_logado(conn)
 
+def _tela_de_aviso(mensagem):
+    """Mesma moldura da tela de login, com um aviso no lugar do formulário."""
+    _, centro, _ = st.columns([1, 1.5, 1])
+    with centro:
+        logo = theme.imagem_base64("logo.png")
+        st.markdown(
+            f"""<div class="login-topo">
+            <img class="login-logo" src="{logo}" alt="Casa Capital">
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        with st.container(border=True):
+            st.warning(mensagem)
+            if st.button("Sair e tentar outra conta", use_container_width=True):
+                st.logout()
+
+
 if not usuario:
-    # Distingue "não logado" de "logado mas sem grupo"
+    # Três motivos diferentes para não entrar — cada um com seu recado.
     sem_grupo = st.session_state.pop("sem_grupo", None)
-    if sem_grupo:
-        _, centro, _ = st.columns([1, 1.5, 1])
-        with centro:
-            logo = theme.imagem_base64("logo.png")
-            st.markdown(
-                f"""<div class="login-topo">
-                <img class="login-logo" src="{logo}" alt="Casa Capital">
-                </div>""",
-                unsafe_allow_html=True,
-            )
-            with st.container(border=True):
-                st.warning(
-                    f"**Você não tem acesso a nenhum grupo.**  \n"
-                    f"O e-mail **{theme.esc(sem_grupo)}** não está vinculado a nenhuma família.  \n"
-                    "Peça ao administrador para adicioná-lo na tela de Administração."
-                )
-                if st.button("Sair e tentar outra conta", use_container_width=True):
-                    st.logout()
+    bloqueio_rede = st.session_state.pop("rede_bloqueada", None)
+
+    if bloqueio_rede:
+        visto = bloqueio_rede.get("ip") or "não identificado"
+        _tela_de_aviso(
+            f"**Esta conta só pode entrar pela rede de casa.**  \n"
+            f"O e-mail **{theme.esc(bloqueio_rede.get('email', ''))}** está autorizado, "
+            "mas o acesso está vindo de uma rede que não está liberada.  \n\n"
+            f"Rede detectada: `{theme.esc(visto)}`  \n"
+            "Conecte-se ao Wi-Fi de casa e tente de novo."
+        )
+    elif sem_grupo:
+        _tela_de_aviso(
+            f"**Você não tem acesso a nenhum grupo.**  \n"
+            f"O e-mail **{theme.esc(sem_grupo)}** não está vinculado a nenhuma família.  \n"
+            "Peça ao administrador para adicioná-lo na tela de Administração."
+        )
     else:
         auth.tela_login(conn)
     st.stop()

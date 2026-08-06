@@ -93,6 +93,43 @@ def render(conn, usuario):
 
     st.divider()
 
+    # ── Restrição por rede ────────────────────────────────────────────────
+    st.divider()
+    st.markdown("#### 🌐 Restrição por rede")
+
+    ip = auth.ip_do_cliente()
+    redes = auth._redes_liberadas()
+    livres = auth._emails_de_qualquer_rede()
+
+    with st.container(border=True):
+        c1, c2 = st.columns([1, 1])
+        c1.metric("Rede que você está usando agora", ip or "não identificada")
+        c2.metric("Faixas liberadas", len(redes))
+
+        if not ip:
+            st.error(
+                "Não consegui ler o IP de quem acessa. Enquanto for assim, **ninguém** "
+                "fora da lista livre consegue entrar — a checagem falha fechada de "
+                "propósito. Acesse pelo endereço do domínio próprio, que passa pelo "
+                "Cloudflare e envia o cabeçalho `CF-Connecting-IP`."
+            )
+        elif not redes:
+            st.warning(
+                f"Nenhuma faixa liberada. Só quem está em `emails_qualquer_rede` entra "
+                f"({len(livres)} pessoa(s)). Para liberar a casa, acrescente nos secrets:  \n\n"
+                f"```toml\n[acesso]\nredes_liberadas = [\"{ip}\"]\n```"
+            )
+        else:
+            st.caption("Faixas liberadas: " + ", ".join(f"`{theme.esc(r)}`" for r in redes))
+            st.caption(
+                "Entram de qualquer rede: "
+                + (", ".join(theme.esc(e) for e in livres) if livres else "ninguém")
+            )
+            st.info(
+                "IP de casa costuma mudar sozinho. Se alguém for barrado sem motivo, "
+                "compare o número acima com a lista e atualize os secrets."
+            )
+
     # ── Daqui para baixo: só o dono do sistema ────────────────────────────
     # Criar grupos e enxergar os outros grupos é poder sobre o sistema inteiro,
     # não sobre a própria família. Um admin comum para por aqui.
