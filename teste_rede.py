@@ -82,6 +82,29 @@ def executar():
         [("leonardo@gmail.com", False)],
     )
 
+    # A casa sai pelos dois protocolos: o celular costuma pegar IPv6 e o
+    # notebook IPv4. Com só um deles na lista, a pessoa é barrada dependendo
+    # do aparelho — foi exatamente o que aconteceu na primeira versão.
+    casa = ["179.193.98.99", "2804:7f0:6800:8eee::/64"]
+
+    cenario(
+        "Casa por IPv6 (celular no Wi-Fi)",
+        "2804:7f0:6800:8eee:30d6:a398:c91e:b477", casa,
+        [("leonardo@gmail.com", True)],
+    )
+
+    cenario(
+        "Casa por IPv4 (notebook)",
+        "179.193.98.99", casa,
+        [("leonardo@gmail.com", True)],
+    )
+
+    cenario(
+        "IPv6 de outra faixa (3G) continua barrado",
+        "2804:9999:1111:2222::5", casa,
+        [("leonardo@gmail.com", False), ("fabricio@gmail.com", True)],
+    )
+
     return falhas
 
 

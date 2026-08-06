@@ -126,8 +126,11 @@ def render(conn, usuario):
                 + (", ".join(theme.esc(e) for e in livres) if livres else "ninguém")
             )
             st.info(
-                "IP de casa costuma mudar sozinho. Se alguém for barrado sem motivo, "
-                "compare o número acima com a lista e atualize os secrets."
+                "Sua casa sai por **dois protocolos**: o celular costuma pegar IPv6 "
+                "(começa com `2804:`) e o notebook IPv4 (`179.x`). A lista precisa "
+                "dos dois — com só um, a pessoa é barrada dependendo do aparelho. "
+                "Abra esta tela pelo celular e pelo computador para pegar os dois "
+                "números. Eles também mudam sozinhos de tempos em tempos."
             )
 
     # ── Daqui para baixo: só o dono do sistema ────────────────────────────
