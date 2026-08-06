@@ -253,6 +253,17 @@ def usuario_logado(conn=None):
         st.query_params.clear()
         return None
 
+    # A restrição de rede vale aqui também. Sem isto, um link salvo com
+    # ?sessao=... entra de qualquer lugar e passa por cima da regra: era a
+    # segunda porta da casa, destrancada.
+    liberado, ip = rede_permitida(registro.get("email") or registro.get("login"))
+    if not liberado:
+        st.session_state["rede_bloqueada"] = {
+            "email": registro.get("email") or registro.get("login") or "",
+            "ip": ip,
+        }
+        return None
+
     usuario = _sessao_publica(registro)
     # Enriquece com grupo (o login para usuários Google é o próprio e-mail)
     _enriquecer_com_grupo(conn, usuario)
