@@ -527,6 +527,58 @@ def criar_cartao(conn, nome, dia_fechamento, dia_vencimento, limite, grupo_id=No
     return cur.lastrowid
 
 
+def atualizar_cartao(conn, cartao_id, nome, dia_fechamento, dia_vencimento, limite, grupo_id):
+    """O cartão vive em duas tabelas: o nome em `contas`, o resto em `cartoes`.
+
+    O grupo entra na condição para ninguém editar cartão de outra família por
+    id adivinhado.
+    """
+    linha = conn.execute(
+        """SELECT cartoes.id, cartoes.conta_id FROM cartoes
+           JOIN contas ON contas.id = cartoes.conta_id
+           WHERE cartoes.id = ? AND contas.grupo_id = ?""",
+        (cartao_id, grupo_id),
+    ).fetchone()
+    if not linha:
+        return False
+    conn.execute("UPDATE contas SET nome = ? WHERE id = ?", (nome, linha["conta_id"]))
+    conn.execute(
+        "UPDATE cartoes SET dia_fechamento = ?, dia_vencimento = ?, limite = ? WHERE id = ?",
+        (dia_fechamento, dia_vencimento, limite, cartao_id),
+    )
+    conn.commit()
+    return True
+
+
+def contar_lancamentos_cartao(conn, cartao_id):
+    return conn.execute(
+        "SELECT COUNT(*) as total FROM lancamentos WHERE cartao_id = ?", (cartao_id,)
+    ).fetchone()["total"]
+
+
+def deletar_cartao(conn, cartao_id, grupo_id, apagar_lancamentos=False):
+    """(apagou, motivo). Apaga a ficha do cartão e a conta que o representa.
+
+    Sem `apagar_lancamentos`, recusa quando há compras lançadas — some com o
+    cartão levaria junto o histórico de fatura sem o usuário perceber.
+    """
+    linha = conn.execute(
+        """SELECT cartoes.id, cartoes.conta_id FROM cartoes
+           JOIN contas ON contas.id = cartoes.conta_id
+           WHERE cartoes.id = ? AND contas.grupo_id = ?""",
+        (cartao_id, grupo_id),
+    ).fetchone()
+    if not linha:
+        return False, "Cartão não encontrado neste grupo."
+
+    compras = contar_lancamentos_cartao(conn, cartao_id)
+    if compras and not apagar_lancamentos:
+        return False, f"{compras} compra(s) lançada(s) neste cartão."
+
+    deletar_conta(conn, linha["conta_id"], apagar_lancamentos=True)
+    return True, ""
+
+
 def fatura_cartao(conn, cartao_id, mes, ano):
     inicio = date(ano, mes, 1)
     fim = inicio + relativedelta(months=1)
@@ -615,6 +667,15 @@ def criar_forma_pagamento(conn, nome, grupo_id):
     )
     conn.commit()
     return cur.lastrowid
+
+
+def atualizar_forma_pagamento(conn, forma_id, nome, grupo_id):
+    """Só renomeia o que é do grupo — item de fábrica fica como está."""
+    conn.execute(
+        "UPDATE formas_pagamento SET nome = ? WHERE id = ? AND grupo_id = ?",
+        (nome, forma_id, grupo_id),
+    )
+    conn.commit()
 
 
 def deletar_forma_pagamento(conn, forma_id, grupo_id):

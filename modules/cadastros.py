@@ -26,21 +26,23 @@ SECOES = ["🏦  Contas", "💳  Cartões", "🏷️  Categorias", "💰  Formas
 
 
 def render(conn, usuario):
-    grupo_id = usuario["grupo_id"]
-
     secao = st.radio(
         "Cadastro", SECOES, horizontal=True, key="cadastros_secao",
         label_visibility="collapsed",
     )
     st.divider()
+    render_secao(conn, usuario, secao)
 
-    if secao == SECOES[0]:
+
+def render_secao(conn, usuario, secao):
+    grupo_id = usuario["grupo_id"]
+    if "Contas" in secao:
         _contas(conn, grupo_id)
-    elif secao == SECOES[1]:
+    elif "Cartões" in secao:
         _cartoes(conn, grupo_id)
-    elif secao == SECOES[2]:
+    elif "Categorias" in secao:
         _categorias(conn, grupo_id)
-    else:
+    elif "Formas" in secao:
         _formas_pagamento(conn, grupo_id)
 
 
@@ -168,14 +170,62 @@ def _cartoes(conn, grupo_id):
         return
 
     for cart in cartoes:
+        compras = db.contar_lancamentos_cartao(conn, cart["id"])
         with st.container(border=True):
             st.markdown(
-                f"**💳 {theme.esc(cart['nome'])}**  \n"
+                f"**💳 {theme.esc(cart['nome_conta'])}**  \n"
                 f"<span style='color:{theme.TEXT_MUTED};font-size:0.82rem;'>"
                 f"fecha dia {cart['dia_fechamento']} · vence dia {cart['dia_vencimento']} · "
-                f"limite {theme.moeda(cart['limite'])}</span>",
+                f"limite {theme.moeda(cart['limite'])} · {compras} compra(s)</span>",
                 unsafe_allow_html=True,
             )
+
+            if st.checkbox("✏️ Editar / excluir", key=f"cad_cart_edit_{cart['id']}"):
+                with st.form(f"cad_cart_form_{cart['id']}"):
+                    e1, e2, e3, e4 = st.columns([2, 1.2, 1.2, 1.4], vertical_alignment="bottom")
+                    novo_nome = e1.text_input("Nome", value=cart["nome_conta"], key=f"cad_kn_{cart['id']}")
+                    novo_fech = e2.number_input(
+                        "Dia de fechamento", min_value=1, max_value=31,
+                        value=int(cart["dia_fechamento"]), key=f"cad_kf_{cart['id']}")
+                    novo_venc = e3.number_input(
+                        "Dia de vencimento", min_value=1, max_value=31,
+                        value=int(cart["dia_vencimento"]), key=f"cad_kv_{cart['id']}")
+                    novo_lim = e4.number_input(
+                        "Limite (R$)", min_value=0.0, value=float(cart["limite"]),
+                        step=100.0, format="%.2f", key=f"cad_kl_{cart['id']}")
+                    salvar = st.form_submit_button("Salvar alterações", use_container_width=True)
+
+                if salvar:
+                    if not novo_nome.strip():
+                        st.error("O nome não pode ficar vazio.")
+                    else:
+                        db.atualizar_cartao(conn, cart["id"], novo_nome.strip(),
+                                            int(novo_fech), int(novo_venc), novo_lim, grupo_id)
+                        st.success("Cartão atualizado.")
+                        st.rerun()
+
+                st.markdown("---")
+                if compras:
+                    st.caption(
+                        f"Este cartão tem {compras} compra(s) lançada(s). Excluir apaga "
+                        "essas compras e o histórico de faturas junto."
+                    )
+                    confirmado = st.checkbox(
+                        "Confirmo que quero excluir o cartão e suas compras",
+                        key=f"cad_kconf_{cart['id']}",
+                    )
+                else:
+                    confirmado = True
+
+                if st.button("Excluir cartão", key=f"cad_kdel_{cart['id']}",
+                             disabled=not confirmado):
+                    ok, motivo = db.deletar_cartao(conn, cart["id"], grupo_id,
+                                                   apagar_lancamentos=True)
+                    if ok:
+                        st.success(f"Cartão '{cart['nome_conta']}' excluído.")
+                        st.rerun()
+                    else:
+                        st.error(motivo)
 
 
 # ── Categorias ───────────────────────────────────────────────────────────
@@ -209,18 +259,40 @@ def _categorias(conn, grupo_id):
             continue
         for cat in categorias:
             de_fabrica = cat["grupo_id"] is None
+            usos = db.contar_lancamentos_categoria(conn, cat["id"])
             with st.container(border=True):
-                c1, c2, c3 = st.columns([3, 1.4, 1.2], vertical_alignment="center")
+                c1, c2 = st.columns([3.5, 1.6], vertical_alignment="center")
                 c1.markdown(f"{cat['icone']} **{theme.esc(cat['nome'])}**")
-                usos = db.contar_lancamentos_categoria(conn, cat["id"])
                 c2.markdown(
                     f"<span style='color:{theme.TEXT_MUTED};font-size:0.8rem;'>"
                     f"{'de fábrica · ' if de_fabrica else ''}{usos} uso(s)</span>",
                     unsafe_allow_html=True,
                 )
-                if not de_fabrica:
-                    if c3.button("Excluir", key=f"cad_delcat_{cat['id']}",
-                                 use_container_width=True):
+
+                # Item de fábrica é igual para todas as famílias: renomear aqui
+                # mudaria a categoria de todo mundo.
+                if de_fabrica:
+                    continue
+
+                if st.checkbox("✏️ Editar / excluir", key=f"cad_cat_edit_{cat['id']}"):
+                    with st.form(f"cad_cat_form_{cat['id']}"):
+                        e1, e2 = st.columns([3, 1], vertical_alignment="bottom")
+                        novo_nome = e1.text_input("Nome", value=cat["nome"],
+                                                  key=f"cad_gn_{cat['id']}")
+                        novo_icone = e2.text_input("Ícone", value=cat["icone"],
+                                                   max_chars=4, key=f"cad_gi_{cat['id']}")
+                        salvar = st.form_submit_button("Salvar alterações",
+                                                       use_container_width=True)
+                    if salvar:
+                        if not novo_nome.strip():
+                            st.error("O nome não pode ficar vazio.")
+                        else:
+                            db.atualizar_categoria(conn, cat["id"], novo_nome.strip(),
+                                                   novo_icone.strip() or "💰", grupo_id)
+                            st.success("Categoria atualizada.")
+                            st.rerun()
+
+                    if st.button("Excluir categoria", key=f"cad_delcat_{cat['id']}"):
                         ok, motivo = db.deletar_categoria(conn, cat["id"], grupo_id)
                         if ok:
                             st.success("Categoria excluída.")
@@ -253,16 +325,31 @@ def _formas_pagamento(conn, grupo_id):
     for forma in db.listar_formas_pagamento(conn, grupo_id=grupo_id):
         de_fabrica = forma["grupo_id"] is None
         with st.container(border=True):
-            c1, c2 = st.columns([4, 1.2], vertical_alignment="center")
-            c1.markdown(
+            st.markdown(
                 f"**{theme.esc(forma['nome'])}**"
                 + (f" <span style='color:{theme.TEXT_MUTED};font-size:0.8rem;'>"
                    "· de fábrica</span>" if de_fabrica else ""),
                 unsafe_allow_html=True,
             )
-            if not de_fabrica:
-                if c2.button("Excluir", key=f"cad_delforma_{forma['id']}",
-                             use_container_width=True):
+            if de_fabrica:
+                continue
+
+            if st.checkbox("✏️ Editar / excluir", key=f"cad_forma_edit_{forma['id']}"):
+                with st.form(f"cad_forma_form_{forma['id']}"):
+                    f1, f2 = st.columns([3, 1.4], vertical_alignment="bottom")
+                    novo_nome = f1.text_input("Nome", value=forma["nome"],
+                                              key=f"cad_fn_{forma['id']}")
+                    salvar = f2.form_submit_button("Salvar", use_container_width=True)
+                if salvar:
+                    if not novo_nome.strip():
+                        st.error("O nome não pode ficar vazio.")
+                    else:
+                        db.atualizar_forma_pagamento(conn, forma["id"],
+                                                     novo_nome.strip(), grupo_id)
+                        st.success("Atualizada.")
+                        st.rerun()
+
+                if st.button("Excluir", key=f"cad_delforma_{forma['id']}"):
                     ok, motivo = db.deletar_forma_pagamento(conn, forma["id"], grupo_id)
                     if ok:
                         st.success("Excluída.")

@@ -1,4 +1,8 @@
-"""Tela de administração de grupos e membros (acesso restrito a admins)."""
+"""Tela de administração de grupos e membros (acesso restrito a admins).
+
+Cadastros ficam FORA daqui de propósito: esta tela só aparece para admin, e
+quem é membro precisa poder cadastrar conta, categoria e cartão no dia a dia.
+"""
 
 import streamlit as st
 
