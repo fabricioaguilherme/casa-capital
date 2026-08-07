@@ -94,44 +94,41 @@ def render(conn, usuario):
     st.divider()
 
     # ── Restrição por rede ────────────────────────────────────────────────
-    st.divider()
-    st.markdown("#### 🌐 Restrição por rede")
-
+    # A seção só aparece onde a restrição realmente funciona. Numa hospedagem
+    # que esconde o IP do visitante (Streamlit Community Cloud), mostrar o
+    # endereço interno do servidor convidaria a liberá-lo — e liberar essa
+    # faixa liberaria todo mundo, porque é por ela que todos chegam.
     ip = auth.ip_do_cliente()
-    redes = auth._redes_liberadas()
-    livres = auth._emails_de_qualquer_rede()
+    if auth.ip_e_utilizavel(ip):
+        st.divider()
+        st.markdown("#### 🌐 Restrição por rede")
+        redes = auth._redes_liberadas()
+        livres = auth._emails_de_qualquer_rede()
 
-    with st.container(border=True):
-        c1, c2 = st.columns([1, 1])
-        c1.metric("Rede que você está usando agora", ip or "não identificada")
-        c2.metric("Faixas liberadas", len(redes))
+        with st.container(border=True):
+            c1, c2 = st.columns([1, 1])
+            c1.metric("Rede que você está usando agora", ip)
+            c2.metric("Faixas liberadas", len(redes))
 
-        if not ip:
-            st.error(
-                "Não consegui ler o IP de quem acessa. Enquanto for assim, **ninguém** "
-                "fora da lista livre consegue entrar — a checagem falha fechada de "
-                "propósito. Acesse pelo endereço do domínio próprio, que passa pelo "
-                "Cloudflare e envia o cabeçalho `CF-Connecting-IP`."
-            )
-        elif not redes:
-            st.warning(
-                f"Nenhuma faixa liberada. Só quem está em `emails_qualquer_rede` entra "
-                f"({len(livres)} pessoa(s)). Para liberar a casa, acrescente nos secrets:  \n\n"
-                f"```toml\n[acesso]\nredes_liberadas = [\"{ip}\"]\n```"
-            )
-        else:
-            st.caption("Faixas liberadas: " + ", ".join(f"`{theme.esc(r)}`" for r in redes))
-            st.caption(
-                "Entram de qualquer rede: "
-                + (", ".join(theme.esc(e) for e in livres) if livres else "ninguém")
-            )
-            st.info(
-                "Sua casa sai por **dois protocolos**: o celular costuma pegar IPv6 "
-                "(começa com `2804:`) e o notebook IPv4 (`179.x`). A lista precisa "
-                "dos dois — com só um, a pessoa é barrada dependendo do aparelho. "
-                "Abra esta tela pelo celular e pelo computador para pegar os dois "
-                "números. Eles também mudam sozinhos de tempos em tempos."
-            )
+            if not redes:
+                st.warning(
+                    f"Nenhuma faixa liberada. Só quem está em `emails_qualquer_rede` entra "
+                    f"({len(livres)} pessoa(s)). Para liberar a casa, acrescente nos secrets:  \n\n"
+                    f"```toml\n[acesso]\nredes_liberadas = [\"{ip}\"]\n```"
+                )
+            else:
+                st.caption("Faixas liberadas: " + ", ".join(f"`{theme.esc(r)}`" for r in redes))
+                st.caption(
+                    "Entram de qualquer rede: "
+                    + (", ".join(theme.esc(e) for e in livres) if livres else "ninguém")
+                )
+                st.info(
+                    "Sua casa sai por **dois protocolos**: o celular costuma pegar IPv6 "
+                    "(começa com `2804:`) e o notebook IPv4 (`179.x`). A lista precisa "
+                    "dos dois — com só um, a pessoa é barrada dependendo do aparelho. "
+                    "Abra esta tela pelo celular e pelo computador para pegar os dois "
+                    "números. Eles também mudam sozinhos de tempos em tempos."
+                )
 
     # ── Daqui para baixo: só o dono do sistema ────────────────────────────
     # Criar grupos e enxergar os outros grupos é poder sobre o sistema inteiro,

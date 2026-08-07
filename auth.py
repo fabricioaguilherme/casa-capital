@@ -126,6 +126,25 @@ def ip_do_cliente():
     return None
 
 
+def ip_e_utilizavel(ip):
+    """False quando o endereço não é o de quem acessa, e sim o de um servidor
+    no meio do caminho.
+
+    O Streamlit Community Cloud entrega o IP interno dele (10.x.x.x) para
+    qualquer visitante. Tratar isso como 'a rede do usuário' é pior que não ter
+    informação: liberar essa faixa liberaria o mundo inteiro de uma vez, porque
+    todo mundo chega por ela.
+    """
+    if not ip:
+        return False
+    try:
+        import ipaddress
+        endereco = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return not (endereco.is_private or endereco.is_loopback or endereco.is_link_local)
+
+
 def _redes_liberadas():
     """Faixas de IP consideradas 'de casa'. Vazio = nenhuma."""
     try:
