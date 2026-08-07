@@ -11,7 +11,7 @@ def render(conn, usuario):
     grupo_id = usuario["grupo_id"]
     contas = db.listar_contas(conn, grupo_id=grupo_id)
     contas_nao_cartao = [c for c in contas if c["tipo"] != "cartao"]
-    categorias = db.listar_categorias(conn)
+    categorias = db.listar_categorias(conn, grupo_id=grupo_id)
 
     if not contas_nao_cartao:
         st.warning(
@@ -45,7 +45,7 @@ def render(conn, usuario):
             categoria = st.selectbox("Categoria", cats_filtradas, format_func=lambda c: f"{c['icone']} {c['nome']}", key="fc_categoria")
         with c6:
             rotulo_forma = "Forma de pagamento" if tipo == "saida" else "Forma de recebimento"
-            forma = st.selectbox(rotulo_forma, ["—"] + db.FORMAS_PAGAMENTO, key="fc_forma")
+            forma = st.selectbox(rotulo_forma, ["—"] + db.nomes_formas_pagamento(conn, grupo_id=grupo_id), key="fc_forma")
         with c7:
             status = st.selectbox("Status", ["pago", "pendente"], format_func=lambda s: "Pago/Recebido" if s == "pago" else "Pendente", key="fc_status")
 

@@ -10,38 +10,19 @@ def render(conn, usuario):
     grupo_id = usuario["grupo_id"]
     cartoes = db.listar_cartoes(conn, grupo_id=grupo_id)
 
-    st.markdown("#### ➕ Cadastrar cartão")
-    with st.container(border=True):
-        with st.form("novo_cartao", clear_on_submit=True):
-            nome = st.text_input("Nome do cartão", placeholder="Ex: Nubank, Inter")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                dia_fechamento = st.number_input("Dia de fechamento", min_value=1, max_value=31, value=25)
-            with col2:
-                dia_vencimento = st.number_input("Dia de vencimento", min_value=1, max_value=31, value=5)
-            with col3:
-                limite = st.number_input("Limite (R$)", min_value=0.0, step=100.0, format="%.2f")
-            criar = st.form_submit_button("Cadastrar cartão", use_container_width=True)
-        if criar:
-            if not nome.strip():
-                st.error("Informe o nome do cartão.")
-            else:
-                db.criar_cartao(conn, nome.strip(), int(dia_fechamento), int(dia_vencimento), limite, grupo_id=grupo_id)
-                st.success(f"Cartão '{nome.strip()}' cadastrado.")
-                st.rerun()
-
+    # O cadastro do cartão mora em ⚙️ Cadastros. Aqui é só operação: compras e
+    # faturas. Ter dois formulários criando cartão foi o que confundiu antes.
     if not cartoes:
-        st.info("Nenhum cartão cadastrado ainda. Use o formulário acima.")
+        st.info("Nenhum cartão cadastrado ainda. Cadastre em **⚙️ Cadastros → 💳 Cartões**.")
         return
 
     contas_debito = [c for c in db.listar_contas(conn, grupo_id=grupo_id) if c["tipo"] != "cartao"]
-    categorias_despesa = db.listar_categorias(conn, tipo="despesa")
+    categorias_despesa = db.listar_categorias(conn, tipo="despesa", grupo_id=grupo_id)
 
-    st.divider()
     st.markdown("#### 🛒 Lançar compra no cartão")
     if not contas_debito:
         st.warning(
-            "Cadastre uma conta bancária ou carteira na aba **🏦 Contas** para indicar "
+            "Cadastre uma conta bancária ou carteira em **⚙️ Cadastros** para indicar "
             "quem paga a fatura."
         )
     else:

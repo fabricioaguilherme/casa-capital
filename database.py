@@ -168,6 +168,20 @@ def _migrar_schema(conn):
     _add_column_if_missing(conn, "metas", "grupo_id", "INTEGER REFERENCES grupos(id)")
     _add_column_if_missing(conn, "anexos", "grupo_id", "INTEGER REFERENCES grupos(id)")
 
+    # Categorias e formas de pagamento aceitam grupo_id NULO de propósito:
+    # NULO é item de fábrica, que todo grupo enxerga; preenchido é criação de
+    # uma família, visível só para ela.
+    _add_column_if_missing(conn, "categorias", "grupo_id", "INTEGER REFERENCES grupos(id)")
+
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS formas_pagamento (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        grupo_id INTEGER REFERENCES grupos(id)
+    );
+    """)
+    _seed_formas_pagamento(conn)
+
     conn.executescript("""
     CREATE INDEX IF NOT EXISTS idx_lanc_data ON lancamentos(data);
     CREATE INDEX IF NOT EXISTS idx_lanc_status ON lancamentos(status);
@@ -203,6 +217,20 @@ def _seed_categorias(conn):
     ]
     conn.executemany(
         "INSERT INTO categorias (nome, tipo, icone) VALUES (?, ?, ?)", padrao
+    )
+    conn.commit()
+
+
+def _seed_formas_pagamento(conn):
+    """Popula a lista de fábrica uma única vez (grupo_id nulo = vale para todos)."""
+    existentes = conn.execute(
+        "SELECT COUNT(*) as total FROM formas_pagamento WHERE grupo_id IS NULL"
+    ).fetchone()["total"]
+    if existentes > 0:
+        return
+    conn.executemany(
+        "INSERT INTO formas_pagamento (nome, grupo_id) VALUES (?, NULL)",
+        [(f,) for f in FORMAS_PAGAMENTO],
     )
     conn.commit()
 
@@ -511,20 +539,94 @@ def fatura_cartao(conn, cartao_id, mes, ano):
 
 # ── Categorias ───────────────────────────────────────────────────────────
 
-def listar_categorias(conn, tipo=None):
+def listar_categorias(conn, tipo=None, grupo_id=None):
+    """As de fábrica (grupo_id nulo) mais as criadas pelo próprio grupo."""
+    q = "SELECT * FROM categorias WHERE (grupo_id IS NULL OR grupo_id = ?)"
+    params = [grupo_id]
     if tipo:
-        return conn.execute(
-            "SELECT * FROM categorias WHERE tipo = ? ORDER BY nome", (tipo,)
-        ).fetchall()
-    return conn.execute("SELECT * FROM categorias ORDER BY tipo, nome").fetchall()
+        q += " AND tipo = ?"
+        params.append(tipo)
+    q += " ORDER BY tipo, nome"
+    return conn.execute(q, tuple(params)).fetchall()
 
 
-def criar_categoria(conn, nome, tipo, icone="💰"):
+def criar_categoria(conn, nome, tipo, icone="💰", grupo_id=None):
     cur = conn.execute(
-        "INSERT INTO categorias (nome, tipo, icone) VALUES (?, ?, ?)", (nome, tipo, icone)
+        "INSERT INTO categorias (nome, tipo, icone, grupo_id) VALUES (?, ?, ?, ?)",
+        (nome, tipo, icone, grupo_id),
     )
     conn.commit()
     return cur.lastrowid
+
+
+def atualizar_categoria(conn, categoria_id, nome, icone, grupo_id):
+    """Só mexe no que pertence ao grupo — item de fábrica ninguém renomeia."""
+    conn.execute(
+        "UPDATE categorias SET nome = ?, icone = ? WHERE id = ? AND grupo_id = ?",
+        (nome, icone, categoria_id, grupo_id),
+    )
+    conn.commit()
+
+
+def contar_lancamentos_categoria(conn, categoria_id):
+    return conn.execute(
+        "SELECT COUNT(*) as total FROM lancamentos WHERE categoria_id = ?", (categoria_id,)
+    ).fetchone()["total"]
+
+
+def deletar_categoria(conn, categoria_id, grupo_id):
+    """(apagou, motivo). Recusa se estiver em uso ou se for item de fábrica.
+
+    Apagar uma categoria usada deixaria lançamentos apontando para o vazio, e o
+    DRE pararia de somar aquele gasto sem avisar ninguém.
+    """
+    em_uso = contar_lancamentos_categoria(conn, categoria_id)
+    if em_uso:
+        return False, f"{em_uso} lançamento(s) usam esta categoria."
+    dona = conn.execute(
+        "SELECT grupo_id FROM categorias WHERE id = ?", (categoria_id,)
+    ).fetchone()
+    if not dona or dona["grupo_id"] != grupo_id:
+        return False, "Categoria de fábrica não pode ser excluída."
+    conn.execute("DELETE FROM categorias WHERE id = ?", (categoria_id,))
+    conn.commit()
+    return True, ""
+
+
+# ── Formas de pagamento ──────────────────────────────────────────────────
+
+def listar_formas_pagamento(conn, grupo_id=None):
+    linhas = conn.execute(
+        "SELECT * FROM formas_pagamento WHERE (grupo_id IS NULL OR grupo_id = ?) "
+        "ORDER BY grupo_id IS NOT NULL, nome",
+        (grupo_id,),
+    ).fetchall()
+    return linhas
+
+
+def nomes_formas_pagamento(conn, grupo_id=None):
+    """Só os nomes, para alimentar os selectbox de lançamento."""
+    return [f["nome"] for f in listar_formas_pagamento(conn, grupo_id=grupo_id)]
+
+
+def criar_forma_pagamento(conn, nome, grupo_id):
+    cur = conn.execute(
+        "INSERT INTO formas_pagamento (nome, grupo_id) VALUES (?, ?)", (nome, grupo_id)
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def deletar_forma_pagamento(conn, forma_id, grupo_id):
+    """(apagou, motivo). Item de fábrica fica; o do grupo sai."""
+    dona = conn.execute(
+        "SELECT grupo_id FROM formas_pagamento WHERE id = ?", (forma_id,)
+    ).fetchone()
+    if not dona or dona["grupo_id"] != grupo_id:
+        return False, "Forma de pagamento de fábrica não pode ser excluída."
+    conn.execute("DELETE FROM formas_pagamento WHERE id = ?", (forma_id,))
+    conn.commit()
+    return True, ""
 
 
 # ── Lançamentos ──────────────────────────────────────────────────────────

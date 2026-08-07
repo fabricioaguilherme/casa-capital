@@ -4,8 +4,8 @@ import database as db
 import auth
 import theme
 from modules import (
-    dashboard, contas, fluxo_caixa, contas_pagar_receber, cartao_credito,
-    dre, patrimonio, investimentos, metas, admin, backup,
+    dashboard, fluxo_caixa, contas_pagar_receber, cartao_credito,
+    dre, patrimonio, investimentos, metas, admin, backup, cadastros,
 )
 
 st.set_page_config(
@@ -346,7 +346,7 @@ if not usuario.get("grupo_id"):
 # ── Navegação lateral ────────────────────────────────────────────
 PAGINAS = {
     "📊  Dashboard": ("Dashboard", "Visão geral das finanças da família.", dashboard.render),
-    "🏦  Contas": ("Contas", "Contas bancárias, carteiras e cartões.", contas.render),
+    "⚙️  Cadastros": ("Cadastros", "Contas, cartões, categorias e formas de pagamento.", cadastros.render),
     "💰  Fluxo de Caixa": ("Fluxo de Caixa", "Tudo que entrou e saiu.", fluxo_caixa.render),
     "📤  A Pagar": ("Contas a Pagar", "Despesas em aberto e futuras.", contas_pagar_receber.render_a_pagar),
     "📥  A Receber": ("Contas a Receber", "Receitas previstas ainda não recebidas.", contas_pagar_receber.render_a_receber),

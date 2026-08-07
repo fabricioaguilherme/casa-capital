@@ -10,15 +10,16 @@ _br_data = theme.data_br
 
 def _formulario_nova(conn, usuario, tipo, rotulo_acao):
     """Formulário sempre visível para cadastrar uma conta a pagar/receber (lançamento pendente)."""
-    contas = [c for c in db.listar_contas(conn, grupo_id=usuario["grupo_id"]) if c["tipo"] != "cartao"]
+    grupo_id = usuario["grupo_id"]
+    contas = [c for c in db.listar_contas(conn, grupo_id=grupo_id) if c["tipo"] != "cartao"]
     if not contas:
         st.warning(
-            "Cadastre uma conta bancária ou carteira na aba **🏦 Contas** para poder lançar."
+            "Cadastre uma conta bancária ou carteira em **⚙️ Cadastros** para poder lançar."
         )
         return
 
     tipo_categoria = "despesa" if tipo == "saida" else "receita"
-    categorias = db.listar_categorias(conn, tipo=tipo_categoria)
+    categorias = db.listar_categorias(conn, tipo=tipo_categoria, grupo_id=grupo_id)
 
     rotulo_forma = "Forma de pagamento" if tipo == "saida" else "Forma de recebimento"
 
@@ -53,7 +54,7 @@ def _formulario_nova(conn, usuario, tipo, rotulo_acao):
                 )
             with c6:
                 forma = st.selectbox(
-                    rotulo_forma, ["—"] + db.FORMAS_PAGAMENTO, key=f"cpr_forma_{tipo}",
+                    rotulo_forma, ["—"] + db.nomes_formas_pagamento(conn, grupo_id=grupo_id), key=f"cpr_forma_{tipo}",
                 )
             with c7:
                 repetir = st.number_input(
