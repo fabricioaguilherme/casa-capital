@@ -1,7 +1,7 @@
 import os
 import secrets
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 
 import conexao
@@ -499,6 +499,132 @@ def saldo_atual_conta(conn, conta_id):
 
 def saldo_total(conn, grupo_id=None):
     return sum(c["saldo"] for c in saldos_por_conta(conn, grupo_id=grupo_id) if c["tipo"] != "cartao")
+
+
+def saldo_por_natureza(conn, grupo_id=None):
+    """Separa o dinheiro parado em Caixa, Bancos e Aplicações.
+
+    Cartão fica de fora: ele é dívida, não é onde o dinheiro está. Aplicações
+    vêm dos investimentos, que não são conta e por isso não entram no
+    `saldo_total` — daí o total daqui ser maior que o de lá.
+    """
+    contas = saldos_por_conta(conn, grupo_id=grupo_id)
+    caixa = sum(c["saldo"] for c in contas if c["tipo"] == "carteira")
+    bancos = sum(c["saldo"] for c in contas if c["tipo"] == "banco")
+    aplicacoes = sum(i["valor_atual"] for i in listar_investimentos(conn, grupo_id=grupo_id))
+    return {
+        "caixa": caixa,
+        "bancos": bancos,
+        "aplicacoes": aplicacoes,
+        "disponivel": caixa + bancos,
+        "total": caixa + bancos + aplicacoes,
+        "contas": [c for c in contas if c["tipo"] != "cartao"],
+    }
+
+
+def _filtro_previsto(grupo_id, conta_id, categoria_id):
+    """Condição comum das consultas de previsto: só pendente, dentro do grupo."""
+    cond = ["lancamentos.status = 'pendente'"]
+    params = []
+    if grupo_id is not None:
+        cond.append("lancamentos.grupo_id = ?")
+        params.append(grupo_id)
+    if conta_id:
+        cond.append("lancamentos.conta_id = ?")
+        params.append(conta_id)
+    if categoria_id:
+        cond.append("lancamentos.categoria_id = ?")
+        params.append(categoria_id)
+    return " AND ".join(cond), params
+
+
+def previsto_ate(conn, dias, grupo_id=None, conta_id=None, categoria_id=None):
+    """(entradas, saidas) pendentes de hoje até hoje + `dias`.
+
+    O passado pendente entra de propósito: conta vencida e não paga continua
+    sendo dinheiro que vai sair, e some da previsão se filtrar só o futuro.
+    """
+    limite = (date.today() + timedelta(days=dias)).isoformat()
+    onde, params = _filtro_previsto(grupo_id, conta_id, categoria_id)
+    linha = conn.execute(
+        f"""SELECT
+              COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0) AS entradas,
+              COALESCE(SUM(CASE WHEN tipo = 'saida'   THEN valor ELSE 0 END), 0) AS saidas
+            FROM lancamentos WHERE {onde} AND data <= ?""",
+        tuple(params + [limite]),
+    ).fetchone()
+    return linha["entradas"], linha["saidas"]
+
+
+def previsto_por_categoria(conn, dias, tipo, grupo_id=None, conta_id=None):
+    """Quebra o previsto por categoria — é o que responde 'sai tanto, com o quê'."""
+    limite = (date.today() + timedelta(days=dias)).isoformat()
+    onde, params = _filtro_previsto(grupo_id, conta_id, None)
+    return conn.execute(
+        f"""SELECT categorias.nome, categorias.icone,
+                   COALESCE(SUM(lancamentos.valor), 0) AS total,
+                   COUNT(*) AS quantidade
+            FROM lancamentos
+            JOIN categorias ON categorias.id = lancamentos.categoria_id
+            WHERE {onde} AND lancamentos.tipo = ? AND lancamentos.data <= ?
+            GROUP BY categorias.id ORDER BY total DESC""",
+        tuple(params + [tipo, limite]),
+    ).fetchall()
+
+
+def projecao_saldo(conn, dias, grupo_id=None, conta_id=None, categoria_id=None):
+    """Saldo dia a dia daqui até `dias` à frente.
+
+    Parte do saldo de hoje (só o que está pago) e vai somando os pendentes na
+    data de cada um. Devolve [(data, saldo, entradas_do_dia, saidas_do_dia)].
+    """
+    hoje = date.today()
+    saldo = saldo_total(conn, grupo_id=grupo_id)
+
+    onde, params = _filtro_previsto(grupo_id, conta_id, categoria_id)
+    limite = (hoje + timedelta(days=dias)).isoformat()
+    linhas = conn.execute(
+        f"""SELECT data,
+              COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0) AS entradas,
+              COALESCE(SUM(CASE WHEN tipo = 'saida'   THEN valor ELSE 0 END), 0) AS saidas
+            FROM lancamentos WHERE {onde} AND data <= ?
+            GROUP BY data ORDER BY data""",
+        tuple(params + [limite]),
+    ).fetchall()
+
+    # Pendente com data passada pesa no primeiro dia: já era para ter saído.
+    por_dia = {}
+    for linha in linhas:
+        dia = max(date.fromisoformat(linha["data"]), hoje)
+        entradas, saidas = por_dia.get(dia, (0.0, 0.0))
+        por_dia[dia] = (entradas + linha["entradas"], saidas + linha["saidas"])
+
+    pontos = []
+    for passo in range(dias + 1):
+        dia = hoje + timedelta(days=passo)
+        entradas, saidas = por_dia.get(dia, (0.0, 0.0))
+        saldo += entradas - saidas
+        pontos.append((dia, saldo, entradas, saidas))
+    return pontos
+
+
+def agrupar_projecao(pontos, granularidade):
+    """Reduz a projeção diária para semanas ou meses, guardando o saldo do
+    último dia de cada balde — que é o que interessa: como termino o período."""
+    if granularidade == "diario":
+        return pontos
+
+    baldes = {}
+    for dia, saldo, entradas, saidas in pontos:
+        if granularidade == "semanal":
+            chave = dia - timedelta(days=dia.weekday())  # segunda-feira
+        else:
+            chave = dia.replace(day=1)
+        anterior = baldes.get(chave)
+        acumulado_e = (anterior[2] if anterior else 0) + entradas
+        acumulado_s = (anterior[3] if anterior else 0) + saidas
+        baldes[chave] = (chave, saldo, acumulado_e, acumulado_s)
+    return [baldes[c] for c in sorted(baldes)]
 
 
 # ── Cartões ──────────────────────────────────────────────────────────────
