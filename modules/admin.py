@@ -66,8 +66,8 @@ def render(conn, usuario):
     # ── Adicionar membro ─────────────────────────────────────────────────
     st.markdown("#### ➕ Adicionar membro")
     st.caption(
-        "O e-mail também precisa estar na lista `emails_autorizados` do `secrets.toml` "
-        "para o login via Google funcionar."
+        "Basta cadastrar aqui. A pessoa entra com a conta Google dela no primeiro "
+        "acesso — não é preciso mexer em configuração nem reiniciar o sistema."
     )
     with st.container(border=True):
         with st.form("add_membro", clear_on_submit=True):
@@ -162,8 +162,8 @@ def render(conn, usuario):
                 )
                 st.success(
                     f"Grupo **{nome_grupo.strip()}** criado (ID {novo_grupo_id}). "
-                    f"Admin: {email_admin.strip().lower()} — ele também precisa estar "
-                    "em `emails_autorizados` para conseguir entrar."
+                    f"Admin: {email_admin.strip().lower()} — já pode entrar com a "
+                    "conta Google dele."
                 )
 
     # ── Todos os grupos (visão global) ────────────────────────────────────

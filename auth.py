@@ -195,12 +195,25 @@ def rede_permitida(email):
 def _usuario_do_google(conn, info):
     """Casa a conta Google com um usuário do banco. Cria no primeiro acesso.
 
-    Só e-mails da lista de autorizados passam — sem isso, qualquer conta
-    Google do mundo entraria no app. Além disso, o e-mail precisa estar em
-    usuarios_grupo para receber um grupo_id, e passar na restrição de rede.
+    Quem manda é o vínculo em `usuarios_grupo`, gerenciado na tela de
+    Administração: sem grupo, ninguém passa. `emails_autorizados` virou uma
+    tranca extra opcional — se a lista existir nos secrets ela é respeitada,
+    se não existir o grupo decide sozinho. Assim liberar alguém é um cadastro
+    na tela, sem editar secrets nem reiniciar o app para todo mundo.
     """
     email = (info.get("email") or "").lower()
-    if not email or email not in _emails_autorizados():
+    if not email:
+        return None
+
+    autorizados = _emails_autorizados()
+    if autorizados and email not in autorizados:
+        return None
+
+    # O grupo é conferido ANTES de tocar no banco. Do contrário cada curioso
+    # com conta Google deixaria uma linha em `usuarios` só por ter tentado.
+    membro = db.grupo_do_usuario(conn, email)
+    if not membro:
+        st.session_state["sem_grupo"] = email
         return None
 
     liberado, ip = rede_permitida(email)
@@ -221,13 +234,7 @@ def _usuario_do_google(conn, info):
             registro = db.buscar_usuario_por_email(conn, email)
 
     usuario = _sessao_publica(registro)
-
-    # Verifica pertencimento a um grupo
-    enriquecido = _enriquecer_com_grupo(conn, usuario)
-    if enriquecido is None:
-        st.session_state["sem_grupo"] = email
-        return None
-    return enriquecido
+    return _enriquecer_com_grupo(conn, usuario)
 
 
 def _token_da_url():
