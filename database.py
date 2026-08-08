@@ -572,6 +572,26 @@ def previsto_por_categoria(conn, dias, tipo, grupo_id=None, conta_id=None):
     ).fetchall()
 
 
+def previsto_por_categoria_periodo(conn, inicio, fim, tipo, grupo_id=None, conta_id=None):
+    """Igual a `previsto_por_categoria`, mas entre duas datas em vez de N dias.
+
+    Existe porque a tela Previsto × Realizado tem período livre e precisa
+    comparar as duas metades com o mesmo recorte.
+    """
+    onde, params = _filtro_previsto(grupo_id, conta_id, None)
+    return conn.execute(
+        f"""SELECT categorias.nome, categorias.icone,
+                   COALESCE(SUM(lancamentos.valor), 0) AS total,
+                   COUNT(*) AS quantidade
+            FROM lancamentos
+            JOIN categorias ON categorias.id = lancamentos.categoria_id
+            WHERE {onde} AND lancamentos.tipo = ?
+              AND lancamentos.data BETWEEN ? AND ?
+            GROUP BY categorias.id ORDER BY total DESC""",
+        tuple(params + [tipo, inicio, fim]),
+    ).fetchall()
+
+
 def projecao_saldo(conn, dias, grupo_id=None, conta_id=None, categoria_id=None):
     """Saldo dia a dia daqui até `dias` à frente.
 
@@ -650,6 +670,46 @@ def realizado_por_mes(conn, inicio, fim, grupo_id=None, conta_id=None, categoria
     ).fetchall()
     for linha in linhas:
         linha["resultado"] = linha["entradas"] - linha["saidas"]
+    return linhas
+
+
+def serie_mensal(conn, inicio, fim, grupo_id=None, conta_id=None, categoria_id=None):
+    """Mês a mês, separando o que já aconteceu do que ainda está marcado.
+
+    Uma consulta só, com as quatro colunas, para dar o gráfico contínuo:
+    o passado vem de `pago`, o futuro de `pendente`, e o mês corrente costuma
+    ter os dois. Somar tudo junto esconderia justamente essa diferença.
+    """
+    cond = []
+    params = []
+    if grupo_id is not None:
+        cond.append("grupo_id = ?")
+        params.append(grupo_id)
+    if conta_id:
+        cond.append("conta_id = ?")
+        params.append(conta_id)
+    if categoria_id:
+        cond.append("categoria_id = ?")
+        params.append(categoria_id)
+    onde = (" AND " + " AND ".join(cond)) if cond else ""
+
+    linhas = conn.execute(
+        f"""SELECT substr(data, 1, 7) AS mes,
+              COALESCE(SUM(CASE WHEN status='pago' AND tipo='entrada' THEN valor ELSE 0 END), 0) AS entradas_reais,
+              COALESCE(SUM(CASE WHEN status='pago' AND tipo='saida'   THEN valor ELSE 0 END), 0) AS saidas_reais,
+              COALESCE(SUM(CASE WHEN status='pendente' AND tipo='entrada' THEN valor ELSE 0 END), 0) AS entradas_previstas,
+              COALESCE(SUM(CASE WHEN status='pendente' AND tipo='saida'   THEN valor ELSE 0 END), 0) AS saidas_previstas
+            FROM lancamentos WHERE data BETWEEN ? AND ?{onde}
+            GROUP BY mes ORDER BY mes""",
+        tuple([inicio, fim] + params),
+    ).fetchall()
+
+    for linha in linhas:
+        linha["resultado_real"] = linha["entradas_reais"] - linha["saidas_reais"]
+        linha["resultado_previsto"] = linha["entradas_previstas"] - linha["saidas_previstas"]
+        linha["entradas_total"] = linha["entradas_reais"] + linha["entradas_previstas"]
+        linha["saidas_total"] = linha["saidas_reais"] + linha["saidas_previstas"]
+        linha["resultado_total"] = linha["entradas_total"] - linha["saidas_total"]
     return linhas
 
 

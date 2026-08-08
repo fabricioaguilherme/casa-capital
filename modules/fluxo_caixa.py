@@ -1,11 +1,12 @@
-"""Fluxo de Caixa — quanto tenho, quanto entra, quanto sai, e como termino.
+"""Fluxo de Caixa — quanto tenho, como foi, o que vem, e como termino.
 
 Quatro visões que respondem perguntas diferentes:
 
-  Saldo atual  onde o dinheiro está parado hoje
-  Previsto     o que já está marcado para entrar e sair
-  Projeção     como o saldo termina, e em que dia ele fura o zero
-  Lançamentos  a lista, e o lançamento avulso (exceção — ver abaixo)
+  Saldo atual          onde o dinheiro está parado hoje
+  Previsto × Realizado como os meses se comportaram e o que ainda está marcado,
+                       no mesmo gráfico ou separados, com o que mostrar à escolha
+  Projeção             como o saldo termina, e em que dia ele fura o zero
+  Lançamentos          a lista, e o lançamento avulso (exceção — ver abaixo)
 
 O caminho normal de registrar conta é **A Pagar / A Receber**. O formulário
 daqui existe só para o que já aconteceu e não estava previsto: o troco do
@@ -25,9 +26,10 @@ import database as db
 import theme
 from modules import anexos
 
-VISOES = ["📊  Saldo atual", "📉  Realizado", "📅  Previsto", "📈  Projeção", "📋  Lançamentos"]
+VISOES = ["📊  Saldo atual", "📉  Previsto × Realizado", "📈  Projeção", "📋  Lançamentos"]
 
-JANELAS = [(7, "7 dias"), (30, "30 dias"), (90, "90 dias")]
+SERIES = ["Entradas", "Saídas", "Resultado"]
+DETALHES = ["Por categoria", "Tabela mensal"]
 
 GRANULARIDADES = {"Diário": "diario", "Semanal": "semanal", "Mensal": "mensal"}
 
@@ -50,90 +52,167 @@ def render(conn, usuario):
     if visao == VISOES[0]:
         _saldo_atual(conn, grupo_id)
     elif visao == VISOES[1]:
-        _realizado(conn, grupo_id, contas)
+        _previsto_realizado(conn, grupo_id, contas)
     elif visao == VISOES[2]:
-        _previsto(conn, grupo_id, contas)
-    elif visao == VISOES[3]:
         _projecao(conn, grupo_id, contas)
     else:
         _lancamentos(conn, usuario, contas)
 
 
-# ── Realizado (o passado) ────────────────────────────────────────────────
+# ── Previsto × Realizado ─────────────────────────────────────────────────
 
-def _realizado(conn, grupo_id, contas):
+def _previsto_realizado(conn, grupo_id, contas):
+    """Passado e futuro na mesma tela, porque a pergunta é a mesma: como está
+    indo. O que já aconteceu vem de `pago`; o que ainda vai, de `pendente`."""
     hoje = date.today()
+
     c1, c2, c3 = st.columns([1.2, 1.2, 2], vertical_alignment="bottom")
     with c1:
-        inicio = st.date_input("De", value=hoje - relativedelta(months=6), key="fc_real_ini")
+        inicio = st.date_input("De", value=hoje - relativedelta(months=5), key="fc_pr_ini")
     with c2:
-        fim = st.date_input("Até", value=hoje, key="fc_real_fim")
+        fim = st.date_input("Até", value=hoje + relativedelta(months=3), key="fc_pr_fim")
     with c3:
-        conta_id = _filtro_conta(conn, contas, chave="fc_real_conta")
+        conta_id = _filtro_conta(conn, contas, chave="fc_pr_conta")
+
+    c4, c5, c6 = st.columns([1.3, 2, 2], vertical_alignment="bottom")
+    with c4:
+        modo = st.radio("Gráfico", ["Unificado", "Separado"], horizontal=True, key="fc_pr_modo")
+    with c5:
+        series = st.multiselect("Mostrar no gráfico", SERIES, default=SERIES, key="fc_pr_series")
+    with c6:
+        detalhes = st.multiselect("Detalhar", DETALHES, default=["Por categoria"],
+                                  key="fc_pr_detalhes")
 
     if inicio > fim:
         st.error("A data inicial está depois da final.")
         return
 
-    entradas, saidas = db.realizado_resumo(
-        conn, inicio.isoformat(), fim.isoformat(), grupo_id=grupo_id, conta_id=conta_id)
-    meses = db.realizado_por_mes(
-        conn, inicio.isoformat(), fim.isoformat(), grupo_id=grupo_id, conta_id=conta_id)
-
-    if not meses:
-        st.info("Nenhum lançamento pago neste período. Só entra aqui o que foi de fato "
-                "pago ou recebido — o que está pendente aparece em Previsto.")
+    serie = db.serie_mensal(conn, inicio.isoformat(), fim.isoformat(),
+                            grupo_id=grupo_id, conta_id=conta_id)
+    if not serie:
+        st.info("Nenhum lançamento neste período.")
         return
 
-    resultado = entradas - saidas
-    qtd_meses = len(meses)
-    positivos = sum(1 for m in meses if m["resultado"] > 0)
+    _cabecalho_pr(serie)
+    _grafico_pr(serie, modo, series)
+
+    if "Por categoria" in detalhes:
+        _categorias_pr(conn, grupo_id, conta_id, inicio, fim, hoje, len(serie))
+    if "Tabela mensal" in detalhes:
+        _tabela_pr(serie)
+
+
+def _cabecalho_pr(serie):
+    real_e = sum(m["entradas_reais"] for m in serie)
+    real_s = sum(m["saidas_reais"] for m in serie)
+    prev_e = sum(m["entradas_previstas"] for m in serie)
+    prev_s = sum(m["saidas_previstas"] for m in serie)
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Entradas", theme.moeda(entradas))
-    m2.metric("Saídas", theme.moeda(saidas))
-    m3.metric("Resultado", theme.moeda(resultado),
-              delta=f"{(resultado / entradas * 100) if entradas else 0:.0f}% do que entrou")
-    m4.metric("Média por mês", theme.moeda(resultado / qtd_meses),
-              help=f"{positivos} de {qtd_meses} meses fecharam no positivo.")
+    m1.metric("Realizado", theme.moeda(real_e - real_s),
+              help=f"Entradas {theme.moeda(real_e)} · Saídas {theme.moeda(real_s)}")
+    m2.metric("Previsto", theme.moeda(prev_e - prev_s),
+              help=f"Entradas {theme.moeda(prev_e)} · Saídas {theme.moeda(prev_s)}")
+    m3.metric("Total do período", theme.moeda((real_e + prev_e) - (real_s + prev_s)))
+    m4.metric("Média por mês", theme.moeda(((real_e + prev_e) - (real_s + prev_s)) / len(serie)),
+              help=f"{len(serie)} mês(es) no período.")
 
-    if resultado < 0:
-        st.warning(
-            f"No período você gastou **{theme.moeda_md(abs(resultado))} a mais** do que "
-            "entrou. A diferença saiu do saldo que já existia."
-        )
 
-    # Barras de entrada e saída com a linha do resultado por cima: é onde se
-    # enxerga o mês que destoou.
-    rotulos = [f"{m['mes'][5:]}/{m['mes'][2:4]}" for m in meses]
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=rotulos, y=[m["entradas"] for m in meses], name="Entradas",
-                         marker_color=theme.GREEN))
-    fig.add_trace(go.Bar(x=rotulos, y=[m["saidas"] for m in meses], name="Saídas",
-                         marker_color=theme.RED))
-    fig.add_trace(go.Scatter(x=rotulos, y=[m["resultado"] for m in meses], name="Resultado",
-                             mode="lines+markers", line=dict(color=theme.BLUE, width=3),
-                             marker=dict(size=8, color=theme.BLUE)))
-    fig.add_hline(y=0, line_dash="dot", line_color=theme.TEXT_SUAVE, opacity=0.5)
-    theme.apply_layout(fig)
-    fig.update_layout(barmode="group", bargap=0.3, height=360, yaxis_title="R$",
-                      margin=dict(l=8, r=8, t=44, b=8))
-    st.plotly_chart(fig, use_container_width=True)
+def _grafico_pr(serie, modo, series):
+    rotulos = [f"{m['mes'][5:]}/{m['mes'][2:4]}" for m in serie]
+
+    def barras(fig, chave_e, chave_s, sufixo, opacidade):
+        if "Entradas" in series:
+            fig.add_trace(go.Bar(x=rotulos, y=[m[chave_e] for m in serie],
+                                 name=f"Entradas{sufixo}", marker_color=theme.GREEN,
+                                 opacity=opacidade))
+        if "Saídas" in series:
+            fig.add_trace(go.Bar(x=rotulos, y=[m[chave_s] for m in serie],
+                                 name=f"Saídas{sufixo}", marker_color=theme.RED,
+                                 opacity=opacidade))
+
+    def linha(fig, chave, nome):
+        if "Resultado" in series:
+            fig.add_trace(go.Scatter(x=rotulos, y=[m[chave] for m in serie], name=nome,
+                                     mode="lines+markers", line=dict(color=theme.BLUE, width=3),
+                                     marker=dict(size=8, color=theme.BLUE)))
+
+    def fechar(fig, altura=340):
+        fig.add_hline(y=0, line_dash="dot", line_color=theme.TEXT_SUAVE, opacity=0.5)
+        theme.apply_layout(fig)
+        fig.update_layout(barmode="stack" if modo == "Unificado" else "group",
+                          bargap=0.3, height=altura, yaxis_title="R$",
+                          margin=dict(l=8, r=8, t=44, b=8))
+        st.plotly_chart(fig, use_container_width=True)
+
+    if modo == "Unificado":
+        # Empilhado: a parte cheia é o que já aconteceu, a clara é o que falta.
+        # Assim a barra do mês corrente mostra as duas coisas sem somar tudo.
+        fig = go.Figure()
+        barras(fig, "entradas_reais", "saidas_reais", " realizadas", 1.0)
+        barras(fig, "entradas_previstas", "saidas_previstas", " previstas", 0.45)
+        linha(fig, "resultado_total", "Resultado total")
+        fechar(fig, 380)
+        st.caption("Barra cheia é o que já aconteceu; a mais clara, o que ainda está marcado.")
+        return
+
+    esq, dir_ = st.columns(2)
+    with esq:
+        st.markdown("###### Realizado")
+        fig = go.Figure()
+        barras(fig, "entradas_reais", "saidas_reais", "", 1.0)
+        linha(fig, "resultado_real", "Resultado")
+        fechar(fig)
+    with dir_:
+        st.markdown("###### Previsto")
+        fig = go.Figure()
+        barras(fig, "entradas_previstas", "saidas_previstas", "", 1.0)
+        linha(fig, "resultado_previsto", "Resultado")
+        fechar(fig)
+
+
+def _categorias_pr(conn, grupo_id, conta_id, inicio, fim, hoje, qtd_meses):
+    st.divider()
+    fatia = st.radio("Categorias de", ["Realizado", "Previsto"], horizontal=True,
+                     key="fc_pr_cat_fatia")
+
+    if fatia == "Realizado":
+        # O realizado só existe até hoje; pedir além disso devolveria vazio.
+        ini, fi = inicio.isoformat(), min(fim, hoje).isoformat()
+        buscar = db.realizado_por_categoria
+        titulos = ("📤 Para onde foi", "📥 De onde veio")
+    else:
+        ini, fi = max(inicio, hoje).isoformat(), fim.isoformat()
+        buscar = db.previsto_por_categoria_periodo
+        titulos = ("📤 O que vai sair", "📥 O que vai entrar")
 
     esq, dir_ = st.columns(2)
     for coluna, tipo, titulo, cor in (
-        (esq, "saida", "📤 Para onde foi", theme.RED),
-        (dir_, "entrada", "📥 De onde veio", theme.GREEN),
+        (esq, "saida", titulos[0], theme.RED),
+        (dir_, "entrada", titulos[1], theme.GREEN),
     ):
         with coluna:
             st.markdown(f"##### {titulo}")
-            linhas = db.realizado_por_categoria(
-                conn, inicio.isoformat(), fim.isoformat(), tipo,
-                grupo_id=grupo_id, conta_id=conta_id)
+            linhas = buscar(conn, ini, fi, tipo, grupo_id=grupo_id, conta_id=conta_id)
             if not linhas:
-                st.caption("Nada neste período.")
+                st.caption("Nada neste recorte.")
                 continue
             st.markdown(_lista_categorias(linhas, cor, qtd_meses), unsafe_allow_html=True)
+
+
+def _tabela_pr(serie):
+    st.divider()
+    st.markdown("##### Mês a mês")
+    tabela = pd.DataFrame([{
+        "Mês": f"{m['mes'][5:]}/{m['mes'][:4]}",
+        "Entradas realizadas": m["entradas_reais"],
+        "Saídas realizadas": m["saidas_reais"],
+        "Resultado realizado": m["resultado_real"],
+        "Entradas previstas": m["entradas_previstas"],
+        "Saídas previstas": m["saidas_previstas"],
+        "Resultado previsto": m["resultado_previsto"],
+    } for m in serie])
+    st.dataframe(tabela, use_container_width=True, hide_index=True)
 
 
 def _lista_categorias(linhas, cor, meses=1):
@@ -195,61 +274,6 @@ def _saldo_atual(conn, grupo_id):
                 f"{theme.moeda_md(conta['saldo'])}</div>",
                 unsafe_allow_html=True,
             )
-
-
-# ── Previsto ─────────────────────────────────────────────────────────────
-
-def _previsto(conn, grupo_id, contas):
-    # Filtro e horizonte na mesma linha: o detalhe por categoria é o que
-    # interessa, e ele precisa caber na tela sem rolagem.
-    c_conta, c_dias = st.columns([2, 3], vertical_alignment="bottom")
-    with c_conta:
-        conta_id = _filtro_conta(conn, contas, chave="fc_prev_conta")
-    with c_dias:
-        dias = st.select_slider(
-            "Horizonte", options=list(range(7, 91, 7)), value=30,
-            format_func=lambda d: f"{d} dias", key="fc_prev_dias",
-        )
-
-    resumo = []
-    for janela, rotulo in JANELAS:
-        entradas, saidas = db.previsto_ate(conn, janela, grupo_id=grupo_id, conta_id=conta_id)
-        liquido = entradas - saidas
-        cor = theme.DEEP_GREEN if liquido >= 0 else theme.RED
-        resumo.append(
-            f"<div style='flex:1;padding:0 10px;border-left:3px solid {cor};'>"
-            f"<div style='font-size:0.72rem;color:{theme.TEXT_MUTED};font-weight:600;'>"
-            f"PRÓXIMOS {rotulo.upper()}</div>"
-            f"<div style='font-weight:700;font-size:1.05rem;color:{cor};'>"
-            f"{theme.moeda_md(liquido)}</div>"
-            f"<div style='font-size:0.74rem;color:{theme.TEXT_MUTED};'>"
-            f"<span style='color:{theme.GREEN};'>+{theme.moeda_md(entradas)}</span> · "
-            f"<span style='color:{theme.RED};'>−{theme.moeda_md(saidas)}</span></div></div>"
-        )
-
-    st.markdown(
-        "<div style='display:flex;gap:6px;margin:2px 0 10px;'>" + "".join(resumo) + "</div>",
-        unsafe_allow_html=True,
-    )
-
-    esq, dir_ = st.columns(2)
-    for coluna, tipo, titulo, cor in (
-        (esq, "saida", f"📤 Saídas previstas · {dias} dias", theme.RED),
-        (dir_, "entrada", f"📥 Entradas previstas · {dias} dias", theme.GREEN),
-    ):
-        with coluna:
-            st.markdown(f"##### {titulo}")
-            linhas = db.previsto_por_categoria(conn, dias, tipo, grupo_id=grupo_id,
-                                               conta_id=conta_id)
-            if not linhas:
-                st.caption("Nada previsto nesta janela.")
-                continue
-            st.markdown(_lista_categorias(linhas, cor), unsafe_allow_html=True)
-
-    st.caption(
-        "Conta vencida e ainda não paga entra desde a primeira janela — ela continua "
-        "sendo dinheiro que vai sair."
-    )
 
 
 # ── Projeção ─────────────────────────────────────────────────────────────

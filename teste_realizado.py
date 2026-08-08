@@ -88,6 +88,27 @@ def executar():
     if abs(prev_e - 5000) > 0.01 or abs(prev_s - 300) > 0.01:
         falhas.append("previsto contaminado por lançamento pago")
 
+
+    # ── Série mensal: passado e futuro na mesma consulta ─────────────────
+    serie = db.serie_mensal(conn, (hoje - timedelta(days=90)).isoformat(),
+                            (hoje + timedelta(days=90)).isoformat(), grupo_id=grupo)
+    tot_er = sum(m["entradas_reais"] for m in serie)
+    tot_sr = sum(m["saidas_reais"] for m in serie)
+    tot_ep = sum(m["entradas_previstas"] for m in serie)
+    tot_sp = sum(m["saidas_previstas"] for m in serie)
+    print("\n  série mensal:")
+    print(f"    realizado: +{tot_er:.2f} / -{tot_sr:.2f}   (esperado +5000 / -2800)")
+    print(f"    previsto : +{tot_ep:.2f} / -{tot_sp:.2f}   (esperado +5000 / -300)")
+    if abs(tot_er - 5000) > 0.01 or abs(tot_sr - 2800) > 0.01:
+        falhas.append("série: parte realizada não bate")
+    if abs(tot_ep - 5000) > 0.01 or abs(tot_sp - 300) > 0.01:
+        falhas.append("série: parte prevista não bate")
+
+    # As duas metades não podem se sobrepor: somadas dão o total do período
+    for m in serie:
+        if abs(m["entradas_total"] - (m["entradas_reais"] + m["entradas_previstas"])) > 0.01:
+            falhas.append(f"série: total do mês {m['mes']} não fecha")
+
     # ── Cifrão escapado ──────────────────────────────────────────────────
     md = theme.moeda_md(1234.56)
     esperado_md = "R" + chr(92) + "$ 1.234,56"
