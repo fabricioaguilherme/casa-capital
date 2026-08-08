@@ -9,17 +9,21 @@ TIPOS_INVESTIMENTO = ["Renda Fixa", "Ações", "Fundos Imobiliários", "Fundos",
 
 def render(conn, usuario):
     grupo_id = usuario["grupo_id"]
-    st.markdown("#### ➕ Adicionar investimento")
+    st.markdown("##### ➕ Adicionar investimento")
     with st.container(border=True):
         with st.form("novo_investimento", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            with col1:
+            # Uma linha só: a carteira e o gráfico embaixo é que precisam do espaço.
+            c1, c2, c3, c4, c5 = st.columns([2.2, 1.4, 1.3, 1.3, 1], vertical_alignment="bottom")
+            with c1:
                 nome = st.text_input("Nome", placeholder="Ex: Tesouro Selic, XPML11, Bitcoin")
+            with c2:
                 tipo = st.selectbox("Tipo", TIPOS_INVESTIMENTO)
-            with col2:
-                valor_aportado = st.number_input("Valor total aportado (R$)", min_value=0.0, step=100.0, format="%.2f")
-                valor_atual = st.number_input("Valor atual da posição (R$)", min_value=0.0, step=100.0, format="%.2f")
-            criar = st.form_submit_button("Salvar investimento", use_container_width=True)
+            with c3:
+                valor_aportado = st.number_input("Aportado (R$)", min_value=0.0, step=100.0, format="%.2f")
+            with c4:
+                valor_atual = st.number_input("Valor atual (R$)", min_value=0.0, step=100.0, format="%.2f")
+            with c5:
+                criar = st.form_submit_button("Salvar", use_container_width=True, type="primary")
         if criar:
             if not nome.strip():
                 st.error("Informe o nome do investimento.")

@@ -152,8 +152,75 @@ def executar():
     return falhas
 
 
+def fatura_de_cartao():
+    """Importar a FATURA: as compras entram no cartão, não como saída da conta."""
+    import sqlite3, tempfile
+    caminho = os.path.join(tempfile.mkdtemp(prefix="casacapital-fat-"), "teste.db")
+    conn = sqlite3.connect(caminho)
+    conn.row_factory = lambda cur, row: {c[0]: row[i] for i, c in enumerate(cur.description)}
+    db.init_db(conn)
+    falhas = []
+    hoje = date.today()
+
+    grupo = db.criar_grupo(conn, "Família Teste")
+    conta = db.criar_conta(conn, "Banco", "banco", 10000.0, grupo_id=grupo)
+    despesa = db.listar_categorias(conn, tipo="despesa", grupo_id=grupo)[0]["id"]
+    fecha, vence = (hoje + timedelta(days=5)).day, (hoje + timedelta(days=20)).day
+    cartao = db.criar_cartao(conn, "Nubank", fecha, vence, 8000.0, grupo_id=grupo)
+
+    # Uma compra JÁ lançada na mão — a fatura vai trazer a mesma
+    db.criar_lancamento(conn, hoje.isoformat(), conta, despesa, "Supermercado",
+                        400.0, "saida", "pendente", 1, cartao_id=cartao, grupo_id=grupo)
+
+    fatura = _extrato([
+        (hoje, -400.00, "SUPERMERCADO EXTRA", "C1"),
+        (hoje, -150.00, "DROGARIA SP", "C2"),
+    ]).replace(b"BANKMSGSRSV1", b"CREDITCARDMSGSRSV1")
+
+    print("\nFatura de cartão:")
+    print(f"  reconhecida como cartão? {ofx.e_de_cartao(fatura)}   "
+          f"{'ok' if ofx.e_de_cartao(fatura) else 'ERRADO'}")
+    if not ofx.e_de_cartao(fatura):
+        falhas.append("não reconheceu o arquivo como fatura de cartão")
+
+    transacoes = ofx.ler(fatura)
+    mercado = [t for t in transacoes if t["fitid"] == "C1"][0]
+    drogaria = [t for t in transacoes if t["fitid"] == "C2"][0]
+
+    # A compra já lançada tem de aparecer como candidata
+    cand = db.candidatos_conciliacao(conn, mercado, grupo_id=grupo,
+                                     conta_id=conta, cartao_id=cartao)
+    print(f"  compra já lançada na mão → {len(cand)} candidato(s)   "
+          f"{'ok' if len(cand) == 1 else 'ERRADO'}")
+    if len(cand) != 1:
+        falhas.append("não achou a compra lançada na mão — duplicaria")
+
+    # A que não existia entra como compra do cartão, pendente
+    novo_id = db.criar_do_extrato(conn, drogaria, conta, despesa, 1,
+                                  grupo_id=grupo, cartao_id=cartao)
+    linha = conn.execute("SELECT * FROM lancamentos WHERE id = ?", (novo_id,)).fetchone()
+    ok = linha["cartao_id"] == cartao and linha["status"] == "pendente"
+    print(f"  compra nova: cartao_id={linha['cartao_id']} status={linha['status']}   "
+          f"{'ok' if ok else 'ERRADO'}")
+    if not ok:
+        falhas.append("compra da fatura não entrou vinculada ao cartão como pendente")
+
+    # E sai do caixa no vencimento, não na data da compra
+    pendentes = db.pendentes_em_caixa(conn, grupo_id=grupo)
+    datas = {p["id"]: p["data_caixa"] for p in pendentes}
+    _, vencimento = db.ciclo_fatura(hoje.isoformat(), fecha, vence)
+    ok = datas.get(novo_id) == vencimento
+    print(f"  sai do caixa em {datas.get(novo_id)} (esperado {vencimento})   "
+          f"{'ok' if ok else 'ERRADO'}")
+    if not ok:
+        falhas.append("compra da fatura não usou a data de vencimento")
+
+    conn.close()
+    return falhas
+
+
 if __name__ == "__main__":
-    problemas = executar()
+    problemas = executar() + fatura_de_cartao()
     if problemas:
         print("\nFALHOU:\n  " + "\n  ".join(problemas))
     else:

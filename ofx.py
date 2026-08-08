@@ -79,6 +79,21 @@ def ler(conteudo):
     return transacoes
 
 
+def e_de_cartao(conteudo):
+    """True quando o arquivo é a fatura de um cartão, não o extrato da conta.
+
+    O OFX separa os dois em blocos diferentes: extrato de conta vem em
+    BANKMSGSRSV1/STMTRS, fatura de cartão em CREDITCARDMSGSRSV1/CCSTMTRS. As
+    transações lá dentro são idênticas, então sem olhar o invólucro é
+    impossível saber — e importar fatura como se fosse conta debita tudo na
+    data errada e ainda duplica com o pagamento que vem no extrato do banco.
+    """
+    if isinstance(conteudo, bytes):
+        conteudo = conteudo.decode("utf-8", errors="replace")
+    texto = conteudo.upper()
+    return "CREDITCARDMSGSRSV1" in texto or "CCSTMTRS" in texto or "CCACCTFROM" in texto
+
+
 def resumo(transacoes):
     """(entradas, saidas, periodo_inicial, periodo_final) para conferência."""
     if not transacoes:

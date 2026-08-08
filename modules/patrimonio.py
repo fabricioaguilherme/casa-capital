@@ -10,18 +10,25 @@ CATEGORIAS_PASSIVO = ["Financiamento", "Empréstimo", "Cartão (dívida)", "Outr
 
 def render(conn, usuario):
     grupo_id = usuario["grupo_id"]
-    st.markdown("#### ➕ Adicionar bem ou dívida")
+    st.markdown("##### ➕ Adicionar bem ou dívida")
     with st.container(border=True):
-        tipo = st.radio("Tipo", ["ativo", "passivo"], format_func=lambda t: "Ativo (bem)" if t == "ativo" else "Passivo (dívida)", horizontal=True, key="pat_tipo")
+        # Tudo numa linha. O "Tipo" virou seleção (não botão de rádio) só para
+        # caber aqui — ele continua fora de formulário porque muda as opções
+        # de categoria na hora.
+        c1, c2, c3, c4, c5 = st.columns([1.3, 2.2, 1.5, 1.3, 1], vertical_alignment="bottom")
+        with c1:
+            tipo = st.selectbox("Tipo", ["ativo", "passivo"], key="pat_tipo",
+                                format_func=lambda t: "Ativo (bem)" if t == "ativo" else "Passivo (dívida)")
         opcoes = CATEGORIAS_ATIVO if tipo == "ativo" else CATEGORIAS_PASSIVO
-
-        col1, col2 = st.columns(2)
-        with col1:
+        with c2:
             nome = st.text_input("Nome", placeholder="Ex: Apartamento Centro, Financiamento do carro", key="pat_nome")
-        with col2:
+        with c3:
             categoria = st.selectbox("Categoria", opcoes, key="pat_categoria")
+        with c4:
             valor = st.number_input("Valor atual (R$)", min_value=0.0, step=1000.0, format="%.2f", key="pat_valor")
-        if st.button("Salvar item", use_container_width=True, key="pat_salvar", type="primary"):
+        with c5:
+            salvar = st.button("Salvar", use_container_width=True, key="pat_salvar", type="primary")
+        if salvar:
             if not nome.strip():
                 st.error("Informe o nome do item.")
             else:

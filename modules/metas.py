@@ -8,18 +8,22 @@ import theme
 
 def render(conn, usuario):
     grupo_id = usuario["grupo_id"]
-    st.markdown("#### ➕ Nova meta")
+    st.markdown("##### ➕ Nova meta")
     with st.container(border=True):
         with st.form("nova_meta", clear_on_submit=True):
-            nome = st.text_input("Nome da meta", placeholder="Ex: Reserva de emergência, Viagem")
-            col1, col2 = st.columns(2)
-            with col1:
+            # Tudo numa linha só: o formulário é curto e a lista de metas
+            # embaixo é o que interessa ver sem rolar.
+            c1, c2, c3, c4 = st.columns([2.6, 1.3, 1.3, 1], vertical_alignment="bottom")
+            with c1:
+                nome = st.text_input("Nome da meta", placeholder="Ex: Reserva de emergência, Viagem")
+            with c2:
                 valor_alvo = st.number_input("Valor alvo (R$)", min_value=0.0, step=100.0, format="%.2f")
-            with col2:
+            with c3:
                 data_alvo = st.date_input(
                     "Data alvo", value=date.today().replace(year=date.today().year + 1)
                 )
-            criar = st.form_submit_button("Criar meta", use_container_width=True)
+            with c4:
+                criar = st.form_submit_button("Criar meta", use_container_width=True, type="primary")
         if criar:
             if not nome.strip():
                 st.error("Informe o nome da meta.")

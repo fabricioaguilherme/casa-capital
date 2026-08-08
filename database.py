@@ -626,11 +626,15 @@ def fitids_ja_importados(conn, fitids, grupo_id=None):
     return {l["fitid"] for l in linhas}
 
 
-def candidatos_conciliacao(conn, transacao, grupo_id=None, conta_id=None):
+def candidatos_conciliacao(conn, transacao, grupo_id=None, conta_id=None, cartao_id=None):
     """Lançamentos pendentes que podem ser esta linha do extrato.
 
     Casa por valor quase exato e data próxima. Devolve ordenado pela distância
     de data, para o mais provável ficar em primeiro.
+
+    Com `cartao_id`, procura entre as compras daquele cartão — é o que evita
+    duplicar quando a pessoa lançou a compra na mão e depois sobe a fatura.
+    Sem ele, procura só entre lançamentos que NÃO são de cartão.
     """
     inicio = (transacao["data"] - timedelta(days=TOLERANCIA_DIAS)).isoformat()
     fim = (transacao["data"] + timedelta(days=TOLERANCIA_DIAS)).isoformat()
@@ -641,9 +645,14 @@ def candidatos_conciliacao(conn, transacao, grupo_id=None, conta_id=None):
     if grupo_id is not None:
         cond.append("lancamentos.grupo_id = ?")
         params.append(grupo_id)
-    if conta_id:
-        cond.append("lancamentos.conta_id = ?")
-        params.append(conta_id)
+    if cartao_id:
+        cond.append("lancamentos.cartao_id = ?")
+        params.append(cartao_id)
+    else:
+        cond.append("lancamentos.cartao_id IS NULL")
+        if conta_id:
+            cond.append("lancamentos.conta_id = ?")
+            params.append(conta_id)
 
     linhas = conn.execute(
         f"""SELECT lancamentos.*, categorias.nome AS nome_categoria,
@@ -734,16 +743,25 @@ def conciliar_fatura(conn, lancamento_ids, fitid):
     conn.commit()
 
 
-def criar_do_extrato(conn, transacao, conta_id, categoria_id, usuario_id, grupo_id=None):
-    """Lançamento novo, já como pago — o extrato só mostra o que aconteceu."""
+def criar_do_extrato(conn, transacao, conta_id, categoria_id, usuario_id,
+                     grupo_id=None, cartao_id=None):
+    """Lançamento novo a partir de uma linha do extrato.
+
+    Vindo do extrato da conta, nasce **pago**: o dinheiro já saiu. Vindo da
+    fatura do cartão, nasce **pendente**, porque a compra ainda vai ser paga
+    no vencimento — é o que faz o ciclo de fatura continuar valendo e o
+    pagamento no extrato do banco poder baixá-la depois.
+    """
+    status = "pendente" if cartao_id else "pago"
     cur = conn.execute(
         """INSERT INTO lancamentos
              (data, conta_id, categoria_id, descricao, valor, tipo, status,
-              usuario_id, grupo_id, fitid)
-           VALUES (?, ?, ?, ?, ?, ?, 'pago', ?, ?, ?)""",
+              usuario_id, grupo_id, fitid, cartao_id, forma_pagamento)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (transacao["data"].isoformat(), conta_id, categoria_id,
          transacao["descricao"][:200], transacao["valor"], transacao["tipo"],
-         usuario_id, grupo_id, transacao["fitid"]),
+         status, usuario_id, grupo_id, transacao["fitid"], cartao_id,
+         "Cartão de crédito" if cartao_id else None),
     )
     conn.commit()
     return cur.lastrowid

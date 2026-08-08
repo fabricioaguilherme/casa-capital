@@ -42,21 +42,61 @@ def render(conn, usuario):
         "sem você confirmar."
     )
 
-    c1, c2 = st.columns([1.4, 2.6], vertical_alignment="bottom")
-    with c1:
-        conta = st.selectbox("Conta deste extrato", contas,
-                             format_func=lambda c: c["nome"], key="imp_conta")
-    with c2:
-        arquivo = st.file_uploader("Arquivo OFX", type=["ofx"], key="imp_arquivo")
-
+    arquivo = st.file_uploader("Arquivo OFX", type=["ofx"], key="imp_arquivo")
     if not arquivo:
+        st.caption(
+            "Dois arquivos diferentes servem aqui: o **extrato da conta**, que traz o "
+            "pagamento da fatura numa linha só, e a **fatura do cartão**, que traz cada "
+            "compra. O sistema reconhece qual é."
+        )
         return
 
+    bruto = arquivo.getvalue()
     try:
-        transacoes = ofx.ler(arquivo.getvalue())
+        transacoes = ofx.ler(bruto)
     except Exception as erro:  # arquivo corrompido ou formato inesperado
         st.error(f"Não consegui ler este arquivo: {erro}")
         return
+
+    # O invólucro do OFX diz se é conta ou cartão. Importar fatura como conta
+    # debitaria tudo na data da compra e duplicaria com o pagamento que vem no
+    # extrato do banco — por isso a origem é confirmada antes de qualquer coisa.
+    parece_cartao = ofx.e_de_cartao(bruto)
+    cartoes = db.listar_cartoes(conn, grupo_id=grupo_id)
+
+    origens = ["🏦 Extrato de conta", "💳 Fatura de cartão"]
+    padrao = 1 if (parece_cartao and cartoes) else 0
+    origem = st.radio("Origem do arquivo", origens, index=padrao,
+                      horizontal=True, key="imp_origem")
+    de_cartao = origem == origens[1]
+
+    if parece_cartao and not de_cartao:
+        st.warning(
+            "Este arquivo **parece ser fatura de cartão**. Importado como extrato de "
+            "conta, as compras sairiam do saldo na data da compra e depois "
+            "duplicariam com o pagamento da fatura."
+        )
+
+    cartao = None
+    if de_cartao:
+        if not cartoes:
+            st.warning("Cadastre o cartão em **⚙️ Configurações → Cadastros** antes de "
+                       "importar a fatura dele.")
+            return
+        c1, c2 = st.columns(2)
+        with c1:
+            cartao = st.selectbox("Cartão", cartoes,
+                                  format_func=lambda c: c["nome_conta"], key="imp_cartao")
+        with c2:
+            conta = st.selectbox("Conta que paga a fatura", contas,
+                                 format_func=lambda c: c["nome"], key="imp_conta_fatura")
+        st.caption(
+            "As compras entram **pendentes**, com o cartão vinculado: elas saem do saldo "
+            "no vencimento da fatura, não na data da compra."
+        )
+    else:
+        conta = st.selectbox("Conta deste extrato", contas,
+                             format_func=lambda c: c["nome"], key="imp_conta")
 
     if not transacoes:
         st.warning(
@@ -84,7 +124,7 @@ def render(conn, usuario):
 
     st.divider()
     st.markdown(f"##### {len(novas)} transação(ões) para revisar")
-    _revisar(conn, usuario, novas, conta, grupo_id)
+    _revisar(conn, usuario, novas, conta, grupo_id, cartao)
 
 
 def _resumo_arquivo(transacoes):
@@ -95,14 +135,19 @@ def _resumo_arquivo(transacoes):
     m3.metric("Saídas", theme.moeda(saidas))
 
 
-def _revisar(conn, usuario, transacoes, conta, grupo_id):
+def _revisar(conn, usuario, transacoes, conta, grupo_id, cartao=None):
     categorias = db.listar_categorias(conn, grupo_id=grupo_id)
+    cartao_id = cartao["id"] if cartao else None
     decisoes = {}
 
     for i, t in enumerate(transacoes):
         chave = t["fitid"] or f"linha{i}"
-        candidatos = db.candidatos_conciliacao(conn, t, grupo_id=grupo_id, conta_id=conta["id"])
-        faturas = db.faturas_para_conciliar(conn, t, grupo_id=grupo_id)
+        # Vindo da fatura, procura entre as compras daquele cartão: é o que
+        # evita duplicar o que já foi lançado na mão.
+        candidatos = db.candidatos_conciliacao(
+            conn, t, grupo_id=grupo_id, conta_id=conta["id"], cartao_id=cartao_id)
+        # Baixa de fatura só faz sentido no extrato da conta.
+        faturas = [] if cartao else db.faturas_para_conciliar(conn, t, grupo_id=grupo_id)
 
         # A sugestão vai na ordem do risco: casar não cria nada, criar cria.
         opcoes = []
@@ -175,7 +220,7 @@ def _revisar(conn, usuario, transacoes, conta, grupo_id):
     )
 
     if st.button("Importar", type="primary", use_container_width=True, key="imp_confirmar"):
-        _aplicar(conn, usuario, decisoes, conta, grupo_id)
+        _aplicar(conn, usuario, decisoes, conta, grupo_id, cartao_id)
 
 
 def _contar(decisoes):
@@ -185,7 +230,7 @@ def _contar(decisoes):
     return contagem
 
 
-def _aplicar(conn, usuario, decisoes, conta, grupo_id):
+def _aplicar(conn, usuario, decisoes, conta, grupo_id, cartao_id=None):
     casados = faturas = criados = 0
 
     for decisao in decisoes.values():
@@ -203,7 +248,7 @@ def _aplicar(conn, usuario, decisoes, conta, grupo_id):
 
         elif acao == CRIAR and decisao.get("categoria"):
             db.criar_do_extrato(conn, t, conta["id"], decisao["categoria"]["id"],
-                                usuario["id"], grupo_id=grupo_id)
+                                usuario["id"], grupo_id=grupo_id, cartao_id=cartao_id)
             criados += 1
 
     partes = []
