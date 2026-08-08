@@ -7,6 +7,9 @@ Quatro visões que respondem perguntas diferentes:
                        no mesmo gráfico ou separados, com o que mostrar à escolha
   Projeção             como o saldo termina, e em que dia ele fura o zero
   Lançamentos          a lista, e o lançamento avulso (exceção — ver abaixo)
+  Foto do cupom        fotografa o canhoto e lança (débito sai hoje, crédito
+                       entra na fatura)
+  Importar extrato     sobe o OFX e concilia com o que já foi lançado
 
 O caminho normal de registrar conta é **A Pagar / A Receber**. O formulário
 daqui existe só para o que já aconteceu e não estava previsto: o troco do
@@ -24,10 +27,10 @@ import streamlit as st
 
 import database as db
 import theme
-from modules import anexos, importar
+from modules import anexos, cupom_foto, importar
 
 VISOES = ["📊  Saldo atual", "📉  Previsto × Realizado", "📈  Projeção",
-          "📋  Lançamentos", "📥  Importar extrato"]
+          "📋  Lançamentos", "📷  Foto do cupom", "📥  Importar extrato"]
 
 AGRUPAMENTOS = {"Mensal": "mensal", "Semanal": "semanal", "Diário": "diario"}
 
@@ -60,6 +63,10 @@ def render(conn, usuario):
         _projecao(conn, grupo_id, contas)
     elif visao == VISOES[3]:
         _lancamentos(conn, usuario, contas)
+    elif visao == VISOES[4]:
+        # A foto do cupom é lançamento do que já aconteceu — mesma família do
+        # extrato. O módulo é próprio; só a porta de entrada é esta.
+        cupom_foto.render(conn, usuario)
     else:
         # Importar extrato é operação de caixa, não configuração — por isso
         # entra aqui. O módulo segue separado; só a porta de entrada é esta.
