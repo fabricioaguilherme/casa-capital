@@ -9,6 +9,17 @@ A conferência não é enfeite. Valor lido errado não dá erro, dá um número
 plausível — por isso os campos vêm preenchidos mas editáveis, e a foto fica
 lado a lado com eles.
 
+**A leitura vem antes das escolhas de propósito.** Perguntar conta, cartão e
+categoria antes da foto faria a pessoa digitar o que a foto já responde, e
+ainda por cima jogaria fora o trabalho quando a leitura falhasse. Lendo
+primeiro, as escolhas chegam com valor, data e estabelecimento já no lugar.
+
+Leitura ruim **não avança sozinha**: o que ela não conseguiu ler fica vazio ou
+como "não identificado", e a tela não deixa passar. Mas também não é beco sem
+saída — "✏️ Preencher na mão" segue com a mesma foto anexada, porque quem está
+em pé no caixa da loja não pode perder a viagem por causa de um reflexo no
+papel.
+
 **Débito e crédito seguem caminhos diferentes**, que é a única parte em que
 errar sai caro:
 
@@ -42,6 +53,7 @@ NA_HORA = ("debito", "pix", "dinheiro")
 
 LIDO = "cupom_lido"
 FOTO = "cupom_foto"
+FALHA = "cupom_falha"
 
 
 def render(conn, usuario):
@@ -102,20 +114,45 @@ def _capturar():
         st.error(str(erro))
         return
 
-    if st.button("🔍 Ler este cupom", type="primary", use_container_width=True):
+    c_ler, c_mao = st.columns([2, 1])
+    if c_ler.button("🔍 Ler este cupom", type="primary", use_container_width=True):
         with st.spinner("Lendo a foto…"):
             try:
                 lido = cupom.ler(imagem, nome)
             except cupom.CupomIlegivel as erro:
-                st.error(f"{erro} Tente uma foto mais nítida, ou lance na mão.")
-                return
+                st.session_state[FALHA] = str(erro)
+                lido = None
             except Exception as erro:  # rede fora, chave inválida, cota
-                st.error(f"A leitura falhou: {erro}")
-                return
+                st.session_state[FALHA] = f"A leitura falhou: {erro}"
+                lido = None
 
-        st.session_state[LIDO] = lido
         st.session_state[FOTO] = {"dados": imagem, "nome": nome}
+        if lido:
+            st.session_state.pop(FALHA, None)
+            st.session_state[LIDO] = lido
         st.rerun()
+
+    # Escapatória: foto ruim não pode custar a viagem inteira. A pessoa está
+    # no caixa da loja com o comprovante na mão — melhor digitar quatro campos
+    # do que sair sem lançar e esquecer depois.
+    if c_mao.button("✏️ Preencher na mão", use_container_width=True):
+        st.session_state[FOTO] = {"dados": imagem, "nome": nome}
+        st.session_state[LIDO] = _em_branco()
+        st.session_state.pop(FALHA, None)
+        st.rerun()
+
+    if st.session_state.get(FALHA):
+        st.error(
+            f"{st.session_state[FALHA]}\n\n"
+            "Tente uma foto mais nítida — ou use **✏️ Preencher na mão**, que "
+            "guarda esta mesma foto como comprovante."
+        )
+
+
+def _em_branco():
+    """Leitura vazia: os campos aparecem para preencher, a foto vai junto."""
+    return {"valor": 0.0, "data": None, "estabelecimento": "", "forma": "desconhecido",
+            "parcelas": 1, "observacao": None, "confianca": "manual"}
 
 
 # ── 2. A conferência ─────────────────────────────────────────────────────
@@ -134,7 +171,9 @@ def _conferir(conn, usuario, contas, grupo_id):
             st.rerun()
 
     with dir_:
-        if lido["confianca"] == "baixa":
+        if lido["confianca"] == "manual":
+            st.info("Preencha os campos abaixo. A foto fica anexada como comprovante.")
+        elif lido["confianca"] == "baixa":
             st.warning("A foto ficou difícil de ler. **Confira todos os campos.**")
         if lido["observacao"]:
             st.caption(f"No comprovante: {theme.esc(lido['observacao'])}")
@@ -143,7 +182,7 @@ def _conferir(conn, usuario, contas, grupo_id):
         descricao = c1.text_input("Descrição", value=lido["estabelecimento"],
                                   key="cupom_desc")
         valor = c2.number_input("Valor (R$)", value=float(lido["valor"]),
-                                min_value=0.01, step=1.0, format="%.2f", key="cupom_valor")
+                                min_value=0.0, step=1.0, format="%.2f", key="cupom_valor")
 
         c3, c4 = st.columns(2)
         data_compra = c3.date_input("Data da compra", value=lido["data"] or date.today(),
@@ -156,8 +195,10 @@ def _conferir(conn, usuario, contas, grupo_id):
 
         if forma == "desconhecido":
             st.warning(
-                "O canhoto não disse se foi **débito ou crédito** — escolha acima. "
-                "No débito o dinheiro sai hoje; no crédito, só no vencimento da fatura."
+                ("Escolha se foi **débito ou crédito** acima."
+                 if lido["confianca"] == "manual" else
+                 "O canhoto não disse se foi **débito ou crédito** — escolha acima.")
+                + " No débito o dinheiro sai hoje; no crédito, só no vencimento da fatura."
             )
             return
 
@@ -239,6 +280,15 @@ def _salvar(conn, usuario, grupo_id, dados):
     if not st.button("Lançar", type="primary", use_container_width=True, key="cupom_lancar"):
         return
 
+    # A trava fica aqui, e não no campo: no modo manual ele nasce zerado, e um
+    # mínimo no widget só faria o número aparecer preenchido com 0,01.
+    if dados["valor"] <= 0:
+        st.error("Informe o valor da compra.")
+        return
+    if not dados["descricao"].strip():
+        st.error("Informe a descrição — é o que você vai reconhecer na lista depois.")
+        return
+
     if escolhido:
         db.conciliar_lancamento(conn, escolhido["id"], None,
                                 data_extrato=dados["data"].isoformat())
@@ -296,5 +346,5 @@ def _guardar_foto(conn, usuario, grupo_id, foto, ids):
 
 
 def _limpar():
-    for chave in (LIDO, FOTO, "cupom_conta_escolhida"):
+    for chave in (LIDO, FOTO, FALHA, "cupom_conta_escolhida"):
         st.session_state.pop(chave, None)

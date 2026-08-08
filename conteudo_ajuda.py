@@ -177,6 +177,10 @@ errar entre eles desloca a saída em até um mês na projeção.
 E se já existir uma conta a pagar do mesmo valor por perto, ela oferece dar
 baixa nela em vez de criar outra — a mesma regra do extrato.
 
+Se a foto não der para ler, nada é lançado por engano — mas você não perde a
+viagem: **✏️ Preencher na mão** segue com os campos vazios e guarda a mesma
+foto como comprovante.
+
 A foto fica anexada ao lançamento, como comprovante.
 """,
         "video": "",
