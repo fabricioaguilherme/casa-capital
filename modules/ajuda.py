@@ -20,14 +20,13 @@ import database as db
 import theme
 
 
-def _url_video(conn, titulo):
+def _url_video(conn, chave, padrao=""):
     """Link do banco; se não houver, o que estiver no catálogo em código."""
     if conn is not None:
-        do_banco = db.video_ajuda(conn, titulo)
+        do_banco = db.video_ajuda(conn, chave)
         if do_banco:
             return do_banco
-    conteudo = conteudo_ajuda.para(titulo) or {}
-    return conteudo.get("video") or ""
+    return padrao or ""
 
 
 def botao(titulo, conn=None):
@@ -46,9 +45,24 @@ def botao(titulo, conn=None):
 
     with st.container(border=True):
         st.markdown(conteudo["texto"])
-        url = _url_video(conn, titulo)
+        url = _url_video(conn, conteudo_ajuda.chave_video(titulo), conteudo.get("video"))
         if url:
             st.video(url)
+
+        # Cada assunto tem vídeo próprio: é o que liga o vídeo à dica, e não à
+        # tela inteira. O balão nativo (help=) não aceitaria vídeo nenhum.
+        assuntos = conteudo_ajuda.topicos(titulo)
+        if assuntos:
+            st.markdown("---")
+            rotulos = [a["titulo"] for a in assuntos]
+            escolhido = st.radio("Assunto", rotulos, key=f"assunto_{titulo}")
+            assunto = next(a for a in assuntos if a["titulo"] == escolhido)
+            st.markdown(assunto["texto"])
+            url_assunto = _url_video(
+                conn, conteudo_ajuda.chave_video(titulo, escolhido), assunto.get("video"))
+            if url_assunto:
+                st.video(url_assunto)
+
         if st.button("Fechar", key=f"fechar_{chave}"):
             st.session_state[chave] = False
             st.rerun()
@@ -68,33 +82,48 @@ def render(conn, usuario):
     videos = db.videos_ajuda(conn)
     escolha = st.selectbox(
         "Tela", telas, key="ajuda_tela_escolhida",
-        format_func=lambda t: f"{'🎬 ' if videos.get(t) else ''}{t}",
+        format_func=lambda x: (
+            "🎬 " if any(videos.get(k) for _, k in conteudo_ajuda.tudo_que_aceita_video(x))
+            else ""
+        ) + x,
     )
 
-    conteudo = conteudo_ajuda.para(escolha)
-    url = _url_video(conn, escolha)
+    itens = conteudo_ajuda.tudo_que_aceita_video(escolha)
+    rotulos = [f"{'🎬 ' if videos.get(k) else ''}{r}" for r, k in itens]
+    indice = rotulos.index(st.radio("Assunto", rotulos, key=f"ajuda_assunto_{escolha}"))
+    rotulo, chave = itens[indice]
 
+    conteudo = conteudo_ajuda.para(escolha)
+    if indice == 0:
+        texto, padrao = conteudo["texto"], conteudo.get("video")
+    else:
+        assunto = conteudo_ajuda.topicos(escolha)[indice - 1]
+        texto, padrao = assunto["texto"], assunto.get("video")
+
+    url = _url_video(conn, chave, padrao)
     with st.container(border=True):
-        st.markdown(f"##### {escolha}")
-        st.markdown(conteudo["texto"])
+        st.markdown(f"##### {rotulo}")
+        st.markdown(texto)
         if url:
             st.video(url)
         else:
             st.caption("Sem vídeo ainda.")
 
     if dono:
-        _editar_video(conn, escolha, url)
+        _editar_video(conn, chave, url, rotulo)
 
-    with_video = sum(1 for t in telas if _url_video(conn, t))
+    total = sum(len(conteudo_ajuda.tudo_que_aceita_video(x)) for x in telas)
+    com = sum(1 for x in telas
+              for _, k in conteudo_ajuda.tudo_que_aceita_video(x) if videos.get(k))
     st.caption(
-        f"{len(telas)} telas documentadas · {with_video} com vídeo."
+        f"{total} assunto(s) em {len(telas)} tela(s) · {com} com vídeo."
         + ("" if dono else " Só o dono do sistema cadastra vídeos.")
     )
 
 
-def _editar_video(conn, tela, url_atual):
-    st.markdown("##### 🎬 Vídeo desta tela")
-    with st.form(f"ajuda_video_{tela}"):
+def _editar_video(conn, chave, url_atual, rotulo):
+    st.markdown(f"##### 🎬 Vídeo de « {rotulo} »")
+    with st.form(f"ajuda_video_{chave}"):
         c1, c2 = st.columns([4, 1], vertical_alignment="bottom")
         nova = c1.text_input(
             "Link do YouTube", value=url_atual,
@@ -108,7 +137,7 @@ def _editar_video(conn, tela, url_atual):
         if limpa and not limpa.lower().startswith(("http://", "https://")):
             st.error("O endereço precisa começar com https://")
         else:
-            db.salvar_video_ajuda(conn, tela, limpa)
+            db.salvar_video_ajuda(conn, chave, limpa)
             st.success("Vídeo removido." if not limpa else "Vídeo salvo.")
             st.rerun()
 

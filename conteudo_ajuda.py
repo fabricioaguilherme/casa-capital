@@ -44,6 +44,25 @@ normal é A Pagar / A Receber, senão a projeção fica cega.
 lançou.
 """,
         "video": "",
+        "topicos": [
+            {"titulo": "Ler a projeção e achar o dia do aperto",
+             "texto": "A projeção parte do saldo de hoje e vai somando o que está marcado. "
+                      "O aviso vermelho mostra **o dia em que o saldo fura o zero** — é o que "
+                      "dá tempo de antecipar recebimento, adiar saída ou resgatar aplicação.\n\n"
+                      "Conta vencida e não paga pesa no primeiro dia: ela ainda vai sair.",
+             "video": ""},
+            {"titulo": "Por que Aplicações não entram no disponível",
+             "texto": "Disponível é o que paga a conta desta semana: Caixa + Bancos. "
+                      "Aplicação nem sempre resgata no mesmo dia, e somar as duas coisas faz "
+                      "você achar que tem dinheiro que não está à mão.",
+             "video": ""},
+            {"titulo": "Importar o extrato sem duplicar",
+             "texto": "O extrato **confirma**, não lança de novo. Linha que bate com uma conta "
+                      "já cadastrada vira baixa; linha que é pagamento de fatura dá as compras "
+                      "daquele cartão por pagas; só o que não bate com nada vira lançamento novo.\n\n"
+                      "Pode subir o mesmo arquivo quantas vezes quiser.",
+             "video": ""},
+        ],
     },
 
     "Contas a Pagar": {
@@ -83,6 +102,19 @@ duas coisas certas, em lugares diferentes.
 Compra feita **no dia** do fechamento já entra na fatura seguinte.
 """,
         "video": "",
+        "topicos": [
+            {"titulo": "Compra parcelada",
+             "texto": "Informe o **valor total** e o número de parcelas. O sistema cria uma "
+                      "parcela por mês, já numerada (1/6, 2/6…). Não divida na mão.",
+             "video": ""},
+            {"titulo": "Por que a data no fluxo de caixa é outra",
+             "texto": "A compra é **despesa** no dia em que você comprou — é assim que ela conta "
+                      "na análise por categoria. Mas o **dinheiro** só sai no vencimento da "
+                      "fatura, e é essa data que aparece na projeção.\n\n"
+                      "Compra feita **no dia** do fechamento já entra na fatura seguinte: um dia "
+                      "de diferença, um mês de diferença no caixa.",
+             "video": ""},
+        ],
     },
 
     "Patrimônio": {
@@ -143,6 +175,24 @@ Reúne o que não é do dia a dia:
 **❔ Ajuda** — a explicação de todas as telas, junta.
 """,
         "video": "",
+        "topicos": [
+            {"titulo": "Cadastrar um cartão",
+             "texto": "Cartão precisa de **fechamento**, **vencimento** e **limite** — por isso "
+                      "não é cadastrado junto com conta comum. Esses dois dias são o que "
+                      "determina em que fatura cada compra cai.",
+             "video": ""},
+            {"titulo": "Criar categoria própria",
+             "texto": "As de fábrica valem para todo mundo e não podem ser apagadas. As que "
+                      "você criar são só do seu grupo.\n\n"
+                      "Categoria em uso não é apagada: os lançamentos ficariam apontando para "
+                      "o nada e o total pararia de somar sem avisar.",
+             "video": ""},
+            {"titulo": "Fazer e restaurar backup",
+             "texto": "O `.zip` traz uma planilha por tabela (abre no Excel) e um JSON que o "
+                      "sistema lê de volta. Baixe de vez em quando: seus dados moram num "
+                      "serviço gratuito.",
+             "video": ""},
+        ],
     },
 
     "Backup": {
@@ -186,6 +236,14 @@ reiniciar o sistema.
 **Admin** manda no próprio grupo. Criar grupos novos é só para o dono.
 """,
         "video": "",
+        "topicos": [
+            {"titulo": "Liberar acesso para alguém",
+             "texto": "Cadastre o e-mail em **Adicionar membro** e pronto. A pessoa entra com a "
+                      "conta Google dela no primeiro acesso — sem mexer em configuração nem "
+                      "reiniciar o sistema.\n\n"
+                      "Quem não está vinculado a nenhum grupo não vê tela nenhuma.",
+             "video": ""},
+        ],
     },
 }
 
@@ -193,3 +251,21 @@ reiniciar o sistema.
 def para(titulo):
     """Ajuda de uma tela, ou None se ela ainda não tem texto."""
     return AJUDA.get(titulo)
+
+
+def topicos(titulo):
+    """Assuntos da tela. Cada um pode ter vídeo próprio — é o que permite ligar
+    um vídeo a uma dica específica em vez de um só para a tela inteira."""
+    return (AJUDA.get(titulo) or {}).get("topicos", [])
+
+
+def chave_video(titulo, topico=None):
+    """Identificador do vídeo no banco. Tela sozinha, ou tela + assunto."""
+    return f"{titulo} :: {topico}" if topico else titulo
+
+
+def tudo_que_aceita_video(titulo):
+    """[(rótulo, chave)] de tudo que pode ter vídeo nesta tela."""
+    itens = [("Visão geral da tela", chave_video(titulo))]
+    itens += [(t["titulo"], chave_video(titulo, t["titulo"])) for t in topicos(titulo)]
+    return itens
