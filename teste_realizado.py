@@ -109,6 +109,29 @@ def executar():
         if abs(m["entradas_total"] - (m["entradas_reais"] + m["entradas_previstas"])) > 0.01:
             falhas.append(f"série: total do mês {m['mes']} não fecha")
 
+
+    # ── Granularidade: as três agrupam o MESMO dinheiro ──────────────────
+    ini90 = (hoje - timedelta(days=90)).isoformat()
+    fim90 = (hoje + timedelta(days=90)).isoformat()
+    print("\n  granularidade (o total não pode mudar conforme o agrupamento):")
+    referencia = None
+    for gran in ("mensal", "semanal", "diario"):
+        s = db.serie_periodo(conn, ini90, fim90, gran, grupo_id=grupo)
+        totais = (
+            round(sum(m["entradas_reais"] for m in s), 2),
+            round(sum(m["saidas_reais"] for m in s), 2),
+            round(sum(m["entradas_previstas"] for m in s), 2),
+            round(sum(m["saidas_previstas"] for m in s), 2),
+        )
+        if referencia is None:
+            referencia = totais
+        igual = totais == referencia
+        print(f"    {gran:<8} {len(s):>3} balde(s)  totais={totais}   {'ok' if igual else 'ERRADO'}")
+        if not igual:
+            falhas.append(f"granularidade {gran} mudou os totais")
+        if not all(m.get("rotulo") for m in s):
+            falhas.append(f"granularidade {gran} sem rótulo")
+
     # ── Cifrão escapado ──────────────────────────────────────────────────
     md = theme.moeda_md(1234.56)
     esperado_md = "R" + chr(92) + "$ 1.234,56"

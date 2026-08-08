@@ -673,13 +673,27 @@ def realizado_por_mes(conn, inicio, fim, grupo_id=None, conta_id=None, categoria
     return linhas
 
 
-def serie_mensal(conn, inicio, fim, grupo_id=None, conta_id=None, categoria_id=None):
-    """Mês a mês, separando o que já aconteceu do que ainda está marcado.
+# Como agrupar a série no SQL. A semana começa na segunda: recua o número de
+# dias desde ela ((%w + 6) % 7 transforma domingo=0 em domingo=6).
+_AGRUPAMENTO = {
+    "diario": "data",
+    "semanal": "date(data, '-' || ((CAST(strftime('%w', data) AS INTEGER) + 6) % 7) || ' days')",
+    "mensal": "substr(data, 1, 7)",
+}
 
-    Uma consulta só, com as quatro colunas, para dar o gráfico contínuo:
-    o passado vem de `pago`, o futuro de `pendente`, e o mês corrente costuma
-    ter os dois. Somar tudo junto esconderia justamente essa diferença.
+
+def serie_periodo(conn, inicio, fim, granularidade="mensal",
+                  grupo_id=None, conta_id=None, categoria_id=None):
+    """Série no tempo separando o que já aconteceu do que ainda está marcado.
+
+    Uma consulta só, com as quatro colunas, para dar o gráfico contínuo: o
+    passado vem de `pago`, o futuro de `pendente`, e o período corrente costuma
+    ter os dois. Somar tudo numa coluna esconderia justamente essa diferença.
+
+    `granularidade` aceita diario, semanal ou mensal — mensal enxerga a
+    tendência, diário serve para investigar um mês que destoou.
     """
+    coluna = _AGRUPAMENTO.get(granularidade, _AGRUPAMENTO["mensal"])
     cond = []
     params = []
     if grupo_id is not None:
@@ -694,23 +708,41 @@ def serie_mensal(conn, inicio, fim, grupo_id=None, conta_id=None, categoria_id=N
     onde = (" AND " + " AND ".join(cond)) if cond else ""
 
     linhas = conn.execute(
-        f"""SELECT substr(data, 1, 7) AS mes,
+        f"""SELECT {coluna} AS periodo,
               COALESCE(SUM(CASE WHEN status='pago' AND tipo='entrada' THEN valor ELSE 0 END), 0) AS entradas_reais,
               COALESCE(SUM(CASE WHEN status='pago' AND tipo='saida'   THEN valor ELSE 0 END), 0) AS saidas_reais,
               COALESCE(SUM(CASE WHEN status='pendente' AND tipo='entrada' THEN valor ELSE 0 END), 0) AS entradas_previstas,
               COALESCE(SUM(CASE WHEN status='pendente' AND tipo='saida'   THEN valor ELSE 0 END), 0) AS saidas_previstas
             FROM lancamentos WHERE data BETWEEN ? AND ?{onde}
-            GROUP BY mes ORDER BY mes""",
+            GROUP BY periodo ORDER BY periodo""",
         tuple([inicio, fim] + params),
     ).fetchall()
 
     for linha in linhas:
+        linha["rotulo"] = _rotulo_periodo(linha["periodo"], granularidade)
         linha["resultado_real"] = linha["entradas_reais"] - linha["saidas_reais"]
         linha["resultado_previsto"] = linha["entradas_previstas"] - linha["saidas_previstas"]
         linha["entradas_total"] = linha["entradas_reais"] + linha["entradas_previstas"]
         linha["saidas_total"] = linha["saidas_reais"] + linha["saidas_previstas"]
         linha["resultado_total"] = linha["entradas_total"] - linha["saidas_total"]
     return linhas
+
+
+def _rotulo_periodo(valor, granularidade):
+    """Rótulo curto para o eixo do gráfico: 05/08 · 05/08 (semana) · ago/26."""
+    if granularidade == "mensal":
+        ano, mes = valor.split("-")
+        nomes = ["jan", "fev", "mar", "abr", "mai", "jun",
+                 "jul", "ago", "set", "out", "nov", "dez"]
+        return f"{nomes[int(mes) - 1]}/{ano[2:]}"
+    dia = date.fromisoformat(valor)
+    return dia.strftime("%d/%m")
+
+
+def serie_mensal(conn, inicio, fim, grupo_id=None, conta_id=None, categoria_id=None):
+    """Atalho para a série mensal — o padrão da tela."""
+    return serie_periodo(conn, inicio, fim, "mensal", grupo_id=grupo_id,
+                         conta_id=conta_id, categoria_id=categoria_id)
 
 
 def realizado_por_categoria(conn, inicio, fim, tipo, grupo_id=None, conta_id=None):

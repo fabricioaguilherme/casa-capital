@@ -28,6 +28,8 @@ from modules import anexos
 
 VISOES = ["📊  Saldo atual", "📉  Previsto × Realizado", "📈  Projeção", "📋  Lançamentos"]
 
+AGRUPAMENTOS = {"Mensal": "mensal", "Semanal": "semanal", "Diário": "diario"}
+
 SERIES = ["Entradas", "Saídas", "Resultado"]
 DETALHES = ["Por categoria", "Tabela mensal"]
 
@@ -74,12 +76,17 @@ def _previsto_realizado(conn, grupo_id, contas):
     with c3:
         conta_id = _filtro_conta(conn, contas, chave="fc_pr_conta")
 
-    c4, c5, c6 = st.columns([1.3, 2, 2], vertical_alignment="bottom")
+    c4, c5, c6, c7 = st.columns([1.3, 1.3, 1.8, 1.8], vertical_alignment="bottom")
     with c4:
-        modo = st.radio("Gráfico", ["Unificado", "Separado"], horizontal=True, key="fc_pr_modo")
+        # Mensal enxerga a tendência; diário serve para investigar um mês que
+        # destoou. Por isso mensal é o padrão.
+        periodo = st.radio("Agrupar por", list(AGRUPAMENTOS), horizontal=True,
+                           key="fc_pr_periodo")
     with c5:
-        series = st.multiselect("Mostrar no gráfico", SERIES, default=SERIES, key="fc_pr_series")
+        modo = st.radio("Gráfico", ["Unificado", "Separado"], horizontal=True, key="fc_pr_modo")
     with c6:
+        series = st.multiselect("Mostrar no gráfico", SERIES, default=SERIES, key="fc_pr_series")
+    with c7:
         detalhes = st.multiselect("Detalhar", DETALHES, default=["Por categoria"],
                                   key="fc_pr_detalhes")
 
@@ -87,13 +94,13 @@ def _previsto_realizado(conn, grupo_id, contas):
         st.error("A data inicial está depois da final.")
         return
 
-    serie = db.serie_mensal(conn, inicio.isoformat(), fim.isoformat(),
-                            grupo_id=grupo_id, conta_id=conta_id)
+    serie = db.serie_periodo(conn, inicio.isoformat(), fim.isoformat(),
+                             AGRUPAMENTOS[periodo], grupo_id=grupo_id, conta_id=conta_id)
     if not serie:
         st.info("Nenhum lançamento neste período.")
         return
 
-    _cabecalho_pr(serie)
+    _cabecalho_pr(serie, periodo)
     _grafico_pr(serie, modo, series)
 
     if "Por categoria" in detalhes:
@@ -102,7 +109,7 @@ def _previsto_realizado(conn, grupo_id, contas):
         _tabela_pr(serie)
 
 
-def _cabecalho_pr(serie):
+def _cabecalho_pr(serie, periodo):
     real_e = sum(m["entradas_reais"] for m in serie)
     real_s = sum(m["saidas_reais"] for m in serie)
     prev_e = sum(m["entradas_previstas"] for m in serie)
@@ -114,12 +121,14 @@ def _cabecalho_pr(serie):
     m2.metric("Previsto", theme.moeda(prev_e - prev_s),
               help=f"Entradas {theme.moeda(prev_e)} · Saídas {theme.moeda(prev_s)}")
     m3.metric("Total do período", theme.moeda((real_e + prev_e) - (real_s + prev_s)))
-    m4.metric("Média por mês", theme.moeda(((real_e + prev_e) - (real_s + prev_s)) / len(serie)),
-              help=f"{len(serie)} mês(es) no período.")
+    unidade = {"Mensal": "mês", "Semanal": "semana", "Diário": "dia"}[periodo]
+    m4.metric(f"Média por {unidade}",
+              theme.moeda(((real_e + prev_e) - (real_s + prev_s)) / len(serie)),
+              help=f"{len(serie)} {unidade}(s) com movimento no período.")
 
 
 def _grafico_pr(serie, modo, series):
-    rotulos = [f"{m['mes'][5:]}/{m['mes'][2:4]}" for m in serie]
+    rotulos = [m["rotulo"] for m in serie]
 
     def barras(fig, chave_e, chave_s, sufixo, opacidade):
         if "Entradas" in series:
@@ -202,9 +211,9 @@ def _categorias_pr(conn, grupo_id, conta_id, inicio, fim, hoje, qtd_meses):
 
 def _tabela_pr(serie):
     st.divider()
-    st.markdown("##### Mês a mês")
+    st.markdown("##### Período a período")
     tabela = pd.DataFrame([{
-        "Mês": f"{m['mes'][5:]}/{m['mes'][:4]}",
+        "Período": m["rotulo"],
         "Entradas realizadas": m["entradas_reais"],
         "Saídas realizadas": m["saidas_reais"],
         "Resultado realizado": m["resultado_real"],
