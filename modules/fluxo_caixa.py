@@ -15,6 +15,8 @@ clique, e avisa qual é o caminho certo.
 
 from datetime import date
 
+from dateutil.relativedelta import relativedelta
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -23,7 +25,7 @@ import database as db
 import theme
 from modules import anexos
 
-VISOES = ["📊  Saldo atual", "📅  Previsto", "📈  Projeção", "📋  Lançamentos"]
+VISOES = ["📊  Saldo atual", "📉  Realizado", "📅  Previsto", "📈  Projeção", "📋  Lançamentos"]
 
 JANELAS = [(7, "7 dias"), (30, "30 dias"), (90, "90 dias")]
 
@@ -48,11 +50,117 @@ def render(conn, usuario):
     if visao == VISOES[0]:
         _saldo_atual(conn, grupo_id)
     elif visao == VISOES[1]:
-        _previsto(conn, grupo_id, contas)
+        _realizado(conn, grupo_id, contas)
     elif visao == VISOES[2]:
+        _previsto(conn, grupo_id, contas)
+    elif visao == VISOES[3]:
         _projecao(conn, grupo_id, contas)
     else:
         _lancamentos(conn, usuario, contas)
+
+
+# ── Realizado (o passado) ────────────────────────────────────────────────
+
+def _realizado(conn, grupo_id, contas):
+    hoje = date.today()
+    c1, c2, c3 = st.columns([1.2, 1.2, 2], vertical_alignment="bottom")
+    with c1:
+        inicio = st.date_input("De", value=hoje - relativedelta(months=6), key="fc_real_ini")
+    with c2:
+        fim = st.date_input("Até", value=hoje, key="fc_real_fim")
+    with c3:
+        conta_id = _filtro_conta(conn, contas, chave="fc_real_conta")
+
+    if inicio > fim:
+        st.error("A data inicial está depois da final.")
+        return
+
+    entradas, saidas = db.realizado_resumo(
+        conn, inicio.isoformat(), fim.isoformat(), grupo_id=grupo_id, conta_id=conta_id)
+    meses = db.realizado_por_mes(
+        conn, inicio.isoformat(), fim.isoformat(), grupo_id=grupo_id, conta_id=conta_id)
+
+    if not meses:
+        st.info("Nenhum lançamento pago neste período. Só entra aqui o que foi de fato "
+                "pago ou recebido — o que está pendente aparece em Previsto.")
+        return
+
+    resultado = entradas - saidas
+    qtd_meses = len(meses)
+    positivos = sum(1 for m in meses if m["resultado"] > 0)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Entradas", theme.moeda(entradas))
+    m2.metric("Saídas", theme.moeda(saidas))
+    m3.metric("Resultado", theme.moeda(resultado),
+              delta=f"{(resultado / entradas * 100) if entradas else 0:.0f}% do que entrou")
+    m4.metric("Média por mês", theme.moeda(resultado / qtd_meses),
+              help=f"{positivos} de {qtd_meses} meses fecharam no positivo.")
+
+    if resultado < 0:
+        st.warning(
+            f"No período você gastou **{theme.moeda_md(abs(resultado))} a mais** do que "
+            "entrou. A diferença saiu do saldo que já existia."
+        )
+
+    # Barras de entrada e saída com a linha do resultado por cima: é onde se
+    # enxerga o mês que destoou.
+    rotulos = [f"{m['mes'][5:]}/{m['mes'][2:4]}" for m in meses]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=rotulos, y=[m["entradas"] for m in meses], name="Entradas",
+                         marker_color=theme.GREEN))
+    fig.add_trace(go.Bar(x=rotulos, y=[m["saidas"] for m in meses], name="Saídas",
+                         marker_color=theme.RED))
+    fig.add_trace(go.Scatter(x=rotulos, y=[m["resultado"] for m in meses], name="Resultado",
+                             mode="lines+markers", line=dict(color=theme.BLUE, width=3),
+                             marker=dict(size=8, color=theme.BLUE)))
+    fig.add_hline(y=0, line_dash="dot", line_color=theme.TEXT_SUAVE, opacity=0.5)
+    theme.apply_layout(fig)
+    fig.update_layout(barmode="group", bargap=0.3, height=360, yaxis_title="R$",
+                      margin=dict(l=8, r=8, t=44, b=8))
+    st.plotly_chart(fig, use_container_width=True)
+
+    esq, dir_ = st.columns(2)
+    for coluna, tipo, titulo, cor in (
+        (esq, "saida", "📤 Para onde foi", theme.RED),
+        (dir_, "entrada", "📥 De onde veio", theme.GREEN),
+    ):
+        with coluna:
+            st.markdown(f"##### {titulo}")
+            linhas = db.realizado_por_categoria(
+                conn, inicio.isoformat(), fim.isoformat(), tipo,
+                grupo_id=grupo_id, conta_id=conta_id)
+            if not linhas:
+                st.caption("Nada neste período.")
+                continue
+            st.markdown(_lista_categorias(linhas, cor, qtd_meses), unsafe_allow_html=True)
+
+
+def _lista_categorias(linhas, cor, meses=1):
+    """Lista compacta de categoria → total, com a média mensal ao lado."""
+    total = sum(l["total"] for l in linhas)
+    blocos = [
+        f"<div style='display:flex;align-items:center;gap:8px;padding:7px 10px;"
+        f"border-bottom:1px solid {theme.BORDER};'>"
+        f"<span>{l['icone']}</span>"
+        f"<span style='flex:1;font-weight:600;'>{theme.esc(l['nome'])}"
+        f"<span style='color:{theme.TEXT_MUTED};font-weight:400;font-size:0.75rem;'> · "
+        f"{(l['total'] / total * 100) if total else 0:.0f}%"
+        + (f" · {theme.moeda_md(l['total'] / meses)}/mês" if meses > 1 else "")
+        + "</span></span>"
+        f"<span style='font-weight:700;color:{cor};white-space:nowrap;'>"
+        f"{theme.moeda_md(l['total'])}</span></div>"
+        for l in linhas
+    ]
+    rodape = (
+        f"<div style='display:flex;padding:8px 10px;font-weight:700;'>"
+        f"<span style='flex:1;'>Total</span>"
+        f"<span style='color:{cor};'>{theme.moeda_md(total)}</span></div>"
+    )
+    return (
+        f"<div style='background:{theme.CARD};border:1px solid {theme.BORDER};"
+        f"border-radius:12px;overflow:hidden;'>" + "".join(blocos) + rodape + "</div>"
+    )
 
 
 # ── Saldo atual ──────────────────────────────────────────────────────────
@@ -69,7 +177,7 @@ def _saldo_atual(conn, grupo_id):
               help="Caixa + Bancos. É com isto que você paga as contas desta semana.")
 
     st.caption(
-        f"Patrimônio líquido em dinheiro: **{theme.moeda(n['total'])}** "
+        f"Patrimônio líquido em dinheiro: **{theme.moeda_md(n['total'])}** "
         "(disponível + aplicações). Cartão de crédito não aparece aqui — ele é dívida, "
         "não é onde o dinheiro está."
     )
@@ -84,7 +192,7 @@ def _saldo_atual(conn, grupo_id):
             cor = theme.DEEP_GREEN if conta["saldo"] >= 0 else theme.RED
             d.markdown(
                 f"<div style='text-align:right;font-weight:700;color:{cor};'>"
-                f"{theme.moeda(conta['saldo'])}</div>",
+                f"{theme.moeda_md(conta['saldo'])}</div>",
                 unsafe_allow_html=True,
             )
 
@@ -92,46 +200,42 @@ def _saldo_atual(conn, grupo_id):
 # ── Previsto ─────────────────────────────────────────────────────────────
 
 def _previsto(conn, grupo_id, contas):
-    conta_id = _filtro_conta(conn, contas, chave="fc_prev_conta")
+    # Filtro e horizonte na mesma linha: o detalhe por categoria é o que
+    # interessa, e ele precisa caber na tela sem rolagem.
+    c_conta, c_dias = st.columns([2, 3], vertical_alignment="bottom")
+    with c_conta:
+        conta_id = _filtro_conta(conn, contas, chave="fc_prev_conta")
+    with c_dias:
+        dias = st.select_slider(
+            "Horizonte", options=list(range(7, 91, 7)), value=30,
+            format_func=lambda d: f"{d} dias", key="fc_prev_dias",
+        )
 
-    st.markdown("##### O que já está marcado para acontecer")
-    colunas = st.columns(3)
-    for coluna, (dias, rotulo) in zip(colunas, JANELAS):
-        entradas, saidas = db.previsto_ate(conn, dias, grupo_id=grupo_id, conta_id=conta_id)
-        with coluna:
-            with st.container(border=True):
-                st.markdown(f"**Próximos {rotulo}**")
-                st.markdown(
-                    f"<span style='color:{theme.GREEN};font-weight:700;'>"
-                    f"+ {theme.moeda(entradas)}</span><br>"
-                    f"<span style='color:{theme.RED};font-weight:700;'>"
-                    f"− {theme.moeda(saidas)}</span>",
-                    unsafe_allow_html=True,
-                )
-                liquido = entradas - saidas
-                cor = theme.DEEP_GREEN if liquido >= 0 else theme.RED
-                st.markdown(
-                    f"<div style='border-top:1px solid {theme.BORDER};margin-top:6px;"
-                    f"padding-top:6px;font-weight:700;color:{cor};'>"
-                    f"{theme.moeda(liquido)}</div>",
-                    unsafe_allow_html=True,
-                )
+    resumo = []
+    for janela, rotulo in JANELAS:
+        entradas, saidas = db.previsto_ate(conn, janela, grupo_id=grupo_id, conta_id=conta_id)
+        liquido = entradas - saidas
+        cor = theme.DEEP_GREEN if liquido >= 0 else theme.RED
+        resumo.append(
+            f"<div style='flex:1;padding:0 10px;border-left:3px solid {cor};'>"
+            f"<div style='font-size:0.72rem;color:{theme.TEXT_MUTED};font-weight:600;'>"
+            f"PRÓXIMOS {rotulo.upper()}</div>"
+            f"<div style='font-weight:700;font-size:1.05rem;color:{cor};'>"
+            f"{theme.moeda_md(liquido)}</div>"
+            f"<div style='font-size:0.74rem;color:{theme.TEXT_MUTED};'>"
+            f"<span style='color:{theme.GREEN};'>+{theme.moeda_md(entradas)}</span> · "
+            f"<span style='color:{theme.RED};'>−{theme.moeda_md(saidas)}</span></div></div>"
+        )
 
-    st.caption(
-        "Conta vencida e ainda não paga entra desde a primeira janela — ela continua "
-        "sendo dinheiro que vai sair."
-    )
-
-    st.divider()
-    dias = st.select_slider(
-        "Detalhar por categoria em", options=[d for d, _ in JANELAS],
-        value=30, format_func=lambda d: f"{d} dias", key="fc_prev_dias",
+    st.markdown(
+        "<div style='display:flex;gap:6px;margin:2px 0 10px;'>" + "".join(resumo) + "</div>",
+        unsafe_allow_html=True,
     )
 
     esq, dir_ = st.columns(2)
     for coluna, tipo, titulo, cor in (
-        (esq, "saida", "📤 Saídas previstas", theme.RED),
-        (dir_, "entrada", "📥 Entradas previstas", theme.GREEN),
+        (esq, "saida", f"📤 Saídas previstas · {dias} dias", theme.RED),
+        (dir_, "entrada", f"📥 Entradas previstas · {dias} dias", theme.GREEN),
     ):
         with coluna:
             st.markdown(f"##### {titulo}")
@@ -140,22 +244,12 @@ def _previsto(conn, grupo_id, contas):
             if not linhas:
                 st.caption("Nada previsto nesta janela.")
                 continue
-            total = sum(l["total"] for l in linhas)
-            for l in linhas:
-                fatia = (l["total"] / total * 100) if total else 0
-                with st.container(border=True):
-                    a, b = st.columns([3, 2])
-                    a.markdown(
-                        f"{l['icone']} **{theme.esc(l['nome'])}**  \n"
-                        f"<span style='color:{theme.TEXT_MUTED};font-size:0.78rem;'>"
-                        f"{l['quantidade']} lançamento(s) · {fatia:.0f}% do total</span>",
-                        unsafe_allow_html=True,
-                    )
-                    b.markdown(
-                        f"<div style='text-align:right;font-weight:700;color:{cor};'>"
-                        f"{theme.moeda(l['total'])}</div>",
-                        unsafe_allow_html=True,
-                    )
+            st.markdown(_lista_categorias(linhas, cor), unsafe_allow_html=True)
+
+    st.caption(
+        "Conta vencida e ainda não paga entra desde a primeira janela — ela continua "
+        "sendo dinheiro que vai sair."
+    )
 
 
 # ── Projeção ─────────────────────────────────────────────────────────────
@@ -190,7 +284,7 @@ def _projecao(conn, grupo_id, contas):
         dia, valor = negativos[0]
         st.error(
             f"**O saldo fica negativo em {theme.data_br(dia.isoformat())}** "
-            f"({theme.moeda(valor)}). Daqui até lá dá para antecipar recebimento, "
+            f"({theme.moeda_md(valor)}). Daqui até lá dá para antecipar recebimento, "
             "adiar alguma saída ou resgatar aplicação."
         )
     else:
@@ -287,7 +381,7 @@ def _lancamentos(conn, usuario, contas):
                 unsafe_allow_html=True,
             )
             c2.markdown(
-                f"<span style='color:{cor};font-weight:700;'>{sinal} {theme.moeda(l['valor'])}</span>",
+                f"<span style='color:{cor};font-weight:700;'>{sinal} {theme.moeda_md(l['valor'])}</span>",
                 unsafe_allow_html=True,
             )
             c3.markdown(

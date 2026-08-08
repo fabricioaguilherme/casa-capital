@@ -45,8 +45,8 @@ def render(conn, usuario):
             st.markdown(
                 f"**{theme.esc(m['nome'])}**  \n"
                 f"<span style='color:{theme.TEXT_MUTED};font-size:0.85rem;'>"
-                f"{theme.moeda(m['valor_atual'])} de {theme.moeda(m['valor_alvo'])} "
-                f"· faltam {theme.moeda(falta)} · até {m['data_alvo']}</span>",
+                f"{theme.moeda_md(m['valor_atual'])} de {theme.moeda_md(m['valor_alvo'])} "
+                f"· faltam {theme.moeda_md(falta)} · até {m['data_alvo']}</span>",
                 unsafe_allow_html=True,
             )
             st.progress(progresso, text=f"{progresso * 100:.0f}%")

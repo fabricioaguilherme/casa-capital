@@ -608,6 +608,65 @@ def projecao_saldo(conn, dias, grupo_id=None, conta_id=None, categoria_id=None):
     return pontos
 
 
+def _filtro_realizado(grupo_id, conta_id, categoria_id):
+    """Só o que foi efetivamente pago/recebido — o previsto tem visão própria."""
+    cond = ["lancamentos.status = 'pago'"]
+    params = []
+    if grupo_id is not None:
+        cond.append("lancamentos.grupo_id = ?")
+        params.append(grupo_id)
+    if conta_id:
+        cond.append("lancamentos.conta_id = ?")
+        params.append(conta_id)
+    if categoria_id:
+        cond.append("lancamentos.categoria_id = ?")
+        params.append(categoria_id)
+    return " AND ".join(cond), params
+
+
+def realizado_resumo(conn, inicio, fim, grupo_id=None, conta_id=None, categoria_id=None):
+    """(entradas, saidas) que de fato aconteceram no período."""
+    onde, params = _filtro_realizado(grupo_id, conta_id, categoria_id)
+    linha = conn.execute(
+        f"""SELECT
+              COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0) AS entradas,
+              COALESCE(SUM(CASE WHEN tipo = 'saida'   THEN valor ELSE 0 END), 0) AS saidas
+            FROM lancamentos WHERE {onde} AND data BETWEEN ? AND ?""",
+        tuple(params + [inicio, fim]),
+    ).fetchone()
+    return linha["entradas"], linha["saidas"]
+
+
+def realizado_por_mes(conn, inicio, fim, grupo_id=None, conta_id=None, categoria_id=None):
+    """Mês a mês: quanto entrou, quanto saiu, quanto sobrou."""
+    onde, params = _filtro_realizado(grupo_id, conta_id, categoria_id)
+    linhas = conn.execute(
+        f"""SELECT substr(data, 1, 7) AS mes,
+              COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0) AS entradas,
+              COALESCE(SUM(CASE WHEN tipo = 'saida'   THEN valor ELSE 0 END), 0) AS saidas
+            FROM lancamentos WHERE {onde} AND data BETWEEN ? AND ?
+            GROUP BY mes ORDER BY mes""",
+        tuple(params + [inicio, fim]),
+    ).fetchall()
+    for linha in linhas:
+        linha["resultado"] = linha["entradas"] - linha["saidas"]
+    return linhas
+
+
+def realizado_por_categoria(conn, inicio, fim, tipo, grupo_id=None, conta_id=None):
+    onde, params = _filtro_realizado(grupo_id, conta_id, None)
+    return conn.execute(
+        f"""SELECT categorias.nome, categorias.icone,
+                   COALESCE(SUM(lancamentos.valor), 0) AS total,
+                   COUNT(*) AS quantidade
+            FROM lancamentos
+            JOIN categorias ON categorias.id = lancamentos.categoria_id
+            WHERE {onde} AND lancamentos.tipo = ? AND lancamentos.data BETWEEN ? AND ?
+            GROUP BY categorias.id ORDER BY total DESC""",
+        tuple(params + [tipo, inicio, fim]),
+    ).fetchall()
+
+
 def agrupar_projecao(pontos, granularidade):
     """Reduz a projeção diária para semanas ou meses, guardando o saldo do
     último dia de cada balde — que é o que interessa: como termino o período."""

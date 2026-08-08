@@ -72,6 +72,18 @@ def moeda(valor):
     return "R$ " + f"{valor:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
 
 
+def moeda_md(valor):
+    """Use SEMPRE esta em `st.markdown`, `st.caption` e afins.
+
+    O markdown do Streamlit lê `$...$` como fórmula matemática. Dois valores em
+    R$ na mesma string fecham um par de cifrões, e tudo entre eles — inclusive
+    HTML — é engolido e reaparece como texto cru na tela. Escapar a cifra
+    resolve. Em `st.metric` e `st.dataframe` não há markdown, então lá vale a
+    `moeda()` normal.
+    """
+    return moeda(valor).replace("$", r"\$")
+
+
 def moeda_curta(valor):
     """Versão compacta para rótulos de gráfico: R$ 3,2 mil · R$ 1,4 mi."""
     magnitude = abs(valor)
