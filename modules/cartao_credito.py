@@ -28,18 +28,31 @@ def render(conn, usuario):
     else:
         with st.container(border=True):
             with st.form("compra_cartao", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                with col1:
-                    cartao = st.selectbox("Cartão", cartoes, format_func=lambda c: c["nome_conta"])
-                    descricao = st.text_input("Descrição da compra", placeholder="Ex: Notebook")
-                    valor_total = st.number_input("Valor total (R$)", min_value=0.0, step=10.0, format="%.2f")
-                with col2:
-                    categoria = st.selectbox("Categoria", categorias_despesa, format_func=lambda c: f"{c['icone']} {c['nome']}")
-                    parcelas = st.number_input("Parcelas", min_value=1, max_value=48, value=1)
-                    data_compra = st.date_input("Data da compra", value=date.today())
-                conta_debito = st.selectbox(
-                    "Conta que vai pagar a fatura", contas_debito, format_func=lambda c: c["nome"],
-                )
+                c1, c2, c3 = st.columns([2, 1, 1])
+                with c1:
+                    descricao = st.text_input("Descrição", placeholder="Ex: Notebook",
+                                              key="cc_desc")
+                with c2:
+                    valor_total = st.number_input("Valor total (R$)", min_value=0.0, step=10.0,
+                                                  format="%.2f", key="cc_valor")
+                with c3:
+                    data_compra = st.date_input("Data da compra", value=date.today(),
+                                                key="cc_data")
+
+                c4, c5, c6, c7 = st.columns([1.1, 1.1, 1.1, 0.7])
+                with c4:
+                    cartao = st.selectbox("Cartão", cartoes,
+                                          format_func=lambda c: c["nome_conta"], key="cc_cartao")
+                with c5:
+                    categoria = st.selectbox("Categoria", categorias_despesa,
+                                             format_func=lambda c: f"{c['icone']} {c['nome']}",
+                                             key="cc_cat")
+                with c6:
+                    conta_debito = st.selectbox("Conta que paga a fatura", contas_debito,
+                                                format_func=lambda c: c["nome"], key="cc_conta")
+                with c7:
+                    parcelas = st.number_input("Parcelas", min_value=1, max_value=48, value=1,
+                                               help="1 = à vista", key="cc_parcelas")
                 enviar = st.form_submit_button("Salvar compra", use_container_width=True)
 
             if enviar:
@@ -56,8 +69,15 @@ def render(conn, usuario):
                         forma_pagamento="Cartão de crédito",
                         grupo_id=grupo_id,
                     )
+                    _, vencimento = db.ciclo_fatura(
+                        data_compra.isoformat(),
+                        cartao["dia_fechamento"], cartao["dia_vencimento"],
+                    )
+                    resumo = (f"{int(parcelas)}x de {theme.moeda(valor_parcela)}"
+                              if parcelas > 1 else theme.moeda(valor_parcela))
                     st.success(
-                        f"Compra lançada em {int(parcelas)}x de {theme.moeda(valor_parcela)}."
+                        f"Compra lançada: {resumo}. "
+                        f"Entra na fatura que vence em {theme.data_br(vencimento.isoformat())}."
                     )
                     st.rerun()
 
