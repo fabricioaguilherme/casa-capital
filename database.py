@@ -173,6 +173,11 @@ def _migrar_schema(conn):
     # uma família, visível só para ela.
     _add_column_if_missing(conn, "categorias", "grupo_id", "INTEGER REFERENCES grupos(id)")
 
+    # Identificador da transação no extrato do banco (FITID do OFX). É ele que
+    # deixa subir o mesmo extrato de novo sem duplicar: o que já tem fitid
+    # gravado é reconhecido e ignorado.
+    _add_column_if_missing(conn, "lancamentos", "fitid", "TEXT")
+
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS formas_pagamento (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -555,6 +560,154 @@ def pendentes_em_caixa(conn, grupo_id=None, conta_id=None, categoria_id=None):
     for linha in linhas:
         linha["data_caixa"] = data_de_caixa(linha, cartoes)
     return linhas
+
+
+# ── Importação de extrato e conciliação ──────────────────────────────────
+
+# Quanto o valor e a data podem divergir para o sistema propor que duas linhas
+# são a mesma coisa. Data folgada porque a conta é paga uns dias antes ou
+# depois do que foi cadastrado; valor apertado porque R$ 400 e R$ 450 são
+# despesas diferentes, não a mesma com arredondamento.
+TOLERANCIA_DIAS = 5
+TOLERANCIA_VALOR = 0.02
+
+
+def fitids_ja_importados(conn, fitids, grupo_id=None):
+    """Quais desses identificadores já entraram — evita duplicar reimportando."""
+    fitids = [f for f in fitids if f]
+    if not fitids:
+        return set()
+    marcadores = ",".join("?" for _ in fitids)
+    filtro = " AND grupo_id = ?" if grupo_id is not None else ""
+    params = list(fitids) + ([grupo_id] if grupo_id is not None else [])
+    linhas = conn.execute(
+        f"SELECT fitid FROM lancamentos WHERE fitid IN ({marcadores}){filtro}",
+        tuple(params),
+    ).fetchall()
+    return {l["fitid"] for l in linhas}
+
+
+def candidatos_conciliacao(conn, transacao, grupo_id=None, conta_id=None):
+    """Lançamentos pendentes que podem ser esta linha do extrato.
+
+    Casa por valor quase exato e data próxima. Devolve ordenado pela distância
+    de data, para o mais provável ficar em primeiro.
+    """
+    inicio = (transacao["data"] - timedelta(days=TOLERANCIA_DIAS)).isoformat()
+    fim = (transacao["data"] + timedelta(days=TOLERANCIA_DIAS)).isoformat()
+
+    cond = ["lancamentos.status = 'pendente'", "lancamentos.tipo = ?",
+            "ABS(lancamentos.valor - ?) <= ?", "lancamentos.data BETWEEN ? AND ?"]
+    params = [transacao["tipo"], transacao["valor"], TOLERANCIA_VALOR, inicio, fim]
+    if grupo_id is not None:
+        cond.append("lancamentos.grupo_id = ?")
+        params.append(grupo_id)
+    if conta_id:
+        cond.append("lancamentos.conta_id = ?")
+        params.append(conta_id)
+
+    linhas = conn.execute(
+        f"""SELECT lancamentos.*, categorias.nome AS nome_categoria,
+                   categorias.icone AS icone_categoria
+            FROM lancamentos
+            JOIN categorias ON categorias.id = lancamentos.categoria_id
+            WHERE {' AND '.join(cond)}""",
+        tuple(params),
+    ).fetchall()
+
+    for linha in linhas:
+        linha["distancia"] = abs((date.fromisoformat(linha["data"]) - transacao["data"]).days)
+    return sorted(linhas, key=lambda l: l["distancia"])
+
+
+def faturas_para_conciliar(conn, transacao, grupo_id=None, tolerancia=0.02):
+    """Faturas em aberto cujo total bate com esta linha do extrato.
+
+    O pagamento da fatura aparece no extrato como um valor só. Criar um
+    lançamento novo com ele duplicaria as compras já registradas — o certo é
+    dar as compras daquela fatura por pagas.
+    """
+    if transacao["tipo"] != "saida":
+        return []
+    cartoes = _mapa_cartoes(conn, grupo_id)
+    if not cartoes:
+        return []
+    nomes = {c["id"]: c["nome_conta"] for c in listar_cartoes(conn, grupo_id=grupo_id)}
+
+    agrupado = {}
+    for linha in pendentes_em_caixa(conn, grupo_id, None, None):
+        if not linha["cartao_id"]:
+            continue
+        chave = (linha["cartao_id"], linha["data_caixa"])
+        total, ids = agrupado.get(chave, (0.0, []))
+        agrupado[chave] = (total + linha["valor"], ids + [linha["id"]])
+
+    achados = []
+    for (cartao_id, vencimento), (total, ids) in agrupado.items():
+        if abs(total - transacao["valor"]) > tolerancia:
+            continue
+        if abs((vencimento - transacao["data"]).days) > TOLERANCIA_DIAS:
+            continue
+        achados.append({
+            "cartao": nomes.get(cartao_id, "Cartão"),
+            "vencimento": vencimento,
+            "total": total,
+            "lancamento_ids": ids,
+        })
+    return sorted(achados, key=lambda f: abs((f["vencimento"] - transacao["data"]).days))
+
+
+def conciliar_lancamento(conn, lancamento_id, fitid, data_extrato=None):
+    """Marca como pago e guarda o identificador do extrato.
+
+    A data também é atualizada: a conta foi paga quando o banco diz, não
+    quando foi cadastrada, e é essa data que o fluxo de caixa precisa.
+    """
+    if data_extrato:
+        conn.execute(
+            "UPDATE lancamentos SET status = 'pago', fitid = ?, data = ? WHERE id = ?",
+            (fitid, data_extrato, lancamento_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE lancamentos SET status = 'pago', fitid = ? WHERE id = ?",
+            (fitid, lancamento_id),
+        )
+    conn.commit()
+
+
+def conciliar_fatura(conn, lancamento_ids, fitid):
+    """Dá por pagas todas as compras de uma fatura.
+
+    O fitid vai só na primeira: ele identifica a linha do extrato, e a linha é
+    uma só. Repetir em todas faria o extrato parecer já importado por inteiro
+    quando só o pagamento da fatura entrou.
+    """
+    if not lancamento_ids:
+        return
+    marcadores = ",".join("?" for _ in lancamento_ids)
+    conn.execute(
+        f"UPDATE lancamentos SET status = 'pago' WHERE id IN ({marcadores})",
+        tuple(lancamento_ids),
+    )
+    conn.execute("UPDATE lancamentos SET fitid = ? WHERE id = ?",
+                 (fitid, lancamento_ids[0]))
+    conn.commit()
+
+
+def criar_do_extrato(conn, transacao, conta_id, categoria_id, usuario_id, grupo_id=None):
+    """Lançamento novo, já como pago — o extrato só mostra o que aconteceu."""
+    cur = conn.execute(
+        """INSERT INTO lancamentos
+             (data, conta_id, categoria_id, descricao, valor, tipo, status,
+              usuario_id, grupo_id, fitid)
+           VALUES (?, ?, ?, ?, ?, ?, 'pago', ?, ?, ?)""",
+        (transacao["data"].isoformat(), conta_id, categoria_id,
+         transacao["descricao"][:200], transacao["valor"], transacao["tipo"],
+         usuario_id, grupo_id, transacao["fitid"]),
+    )
+    conn.commit()
+    return cur.lastrowid
 
 
 def faturas_previstas(conn, dias, grupo_id=None, conta_id=None):

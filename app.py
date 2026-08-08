@@ -5,7 +5,7 @@ import auth
 import theme
 from modules import (
     dashboard, fluxo_caixa, contas_pagar_receber, cartao_credito,
-    patrimonio, investimentos, metas, admin, backup, cadastros,
+    patrimonio, investimentos, metas, admin, backup, cadastros, importar,
 )
 
 st.set_page_config(
@@ -353,6 +353,7 @@ PAGINAS = {
     "🏠  Patrimônio": ("Patrimônio", "Bens, dívidas e patrimônio líquido.", patrimonio.render),
     "💹  Investimentos": ("Investimentos", "Carteira, aportes e rentabilidade.", investimentos.render),
     "🎯  Metas": ("Metas", "Objetivos financeiros e progresso.", metas.render),
+    "📥  Importar extrato": ("Importar extrato", "Suba o OFX do banco e concilie com o que já lançou.", importar.render),
     "💾  Backup": ("Backup", "Baixe uma cópia dos seus dados.", backup.render),
     "⚙️  Cadastros": ("Cadastros", "Contas, cartões, categorias e formas de pagamento.", cadastros.render),
 }
