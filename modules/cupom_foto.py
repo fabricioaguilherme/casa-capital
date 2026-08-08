@@ -61,11 +61,14 @@ def render(conn, usuario):
 
     if not cupom.configurado():
         st.warning(
-            "A leitura por foto precisa de uma **chave da API da Anthropic**. "
-            "Adicione nos secrets do app:\n\n"
-            "```toml\n[anthropic]\napi_key = \"sk-ant-...\"\n```\n\n"
-            "Enquanto isso, o lançamento manual continua em **A Pagar** e no "
-            "**Fluxo de Caixa**."
+            "A leitura por foto precisa de uma **chave de API**. O Gemini tem camada "
+            "gratuita (cerca de 500 leituras por dia) — pegue em "
+            "*aistudio.google.com → Get API key* e cole nos secrets do app:\n\n"
+            "```toml\n[gemini]\napi_key = \"AIza...\"\n```\n\n"
+            "A Anthropic também serve (`[anthropic] api_key`), custa mais e exige "
+            "crédito. Com as duas configuradas, vale o Gemini.\n\n"
+            "Enquanto isso, **📷 Foto do Cupom** continua servindo pelo "
+            "**✏️ Preencher na mão**, que anexa a foto do mesmo jeito."
         )
         return
 
@@ -88,6 +91,8 @@ def _capturar():
         "Tire a foto do **cupom ou do canhoto da maquininha**. O sistema lê o "
         "valor, a data e o estabelecimento — e você confere antes de lançar."
     )
+    quem = {"gemini": "Gemini", "anthropic": "Claude"}.get(cupom.provedor(), "—")
+    st.caption(f"Leitura por {quem}.")
 
     # Duas portas de propósito: no celular a câmera é o caminho natural, no
     # computador a foto já está no arquivo. `st.camera_input` abre a câmera

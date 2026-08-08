@@ -26,9 +26,18 @@ import re
 import unicodedata
 from datetime import date, timedelta
 
-# Sonnet dá conta de cupom fiscal e canhoto de maquininha com folga, e é o
-# equilíbrio certo de custo para algo que roda a cada compra.
-MODELO = "claude-sonnet-5"
+# Dois provedores para a mesma tarefa. O Gemini custa uma fração e é o padrão;
+# a Anthropic fica como alternativa. Quem escolhe é `provedor()`, pela chave que
+# estiver configurada.
+MODELO_GEMINI = "gemini-3.6-flash"
+MODELO_ANTHROPIC = "claude-sonnet-5"
+
+# Compatibilidade com quem importava o nome antigo.
+MODELO = MODELO_ANTHROPIC
+
+# A API do Gemini é /v1beta/interactions ({model, input}) — não o generateContent
+# antigo. Conferido na documentação: escrever de memória daria 404.
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
 MIMES = {
     ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -108,34 +117,109 @@ def explicar_falha(erro):
     return f"A leitura falhou: {texto}"
 
 
-def chave_api():
-    """A chave dos secrets do Streamlit ou do ambiente — o que houver.
+def explicar_falha_http(status, corpo):
+    """Traduz um erro HTTP do Gemini para uma frase que diga o que fazer.
 
-    Aceita as duas formas de colar nos secrets, porque as duas são naturais e
+    Função pura — o `corpo` entra como texto e nada aqui toca a rede, que é o
+    que permite testar as mensagens sem gastar uma chamada.
+    """
+    trecho = (corpo or "")[:300]
+
+    if status in (401, 403):
+        return ("A chave do Gemini foi recusada (**HTTP %d**). Ela chegou até o Google, "
+                "então o problema não é a foto nem o app: é a chave.\n\n"
+                "Confira nos secrets: precisa ser uma chave de **aistudio.google.com → "
+                "Get API key**, colada inteira, sem espaço nem aspas sobrando. Chave "
+                "apagada no console dá o mesmo erro." % status)
+
+    if status == 429:
+        return ("Limite de uso do Gemini atingido (**429**). Na camada gratuita são "
+                "cerca de 500 leituras por dia e 10 por minuto. Espere um pouco e "
+                "tente de novo, ou ative cobrança no Google AI Studio.")
+
+    if status == 400 and "API key" in trecho:
+        return "A chave do Gemini está com formato inválido. Copie de novo, inteira."
+
+    if status >= 500:
+        return ("O Gemini está fora do ar ou sobrecarregado (**HTTP %d**). "
+                "Tente de novo em alguns minutos." % status)
+
+    return "A leitura falhou (HTTP %d): %s" % (status, trecho)
+
+
+def _dos_secrets(secao, chaves_soltas, variaveis):
+    """Procura uma chave em [secao].api_key, depois solta, depois no ambiente.
+
+    Aceita as duas formas de colar nos secrets porque as duas são naturais, e
     ficar sem leitura por causa de um colchete seria bobagem:
 
-        [anthropic]                      ANTHROPIC_API_KEY = "sk-ant-..."
-        api_key = "sk-ant-..."
-
-    (A segunda o Streamlit também exporta para o ambiente, mas ler direto
-    evita depender desse detalhe.)
+        [gemini]                      GEMINI_API_KEY = "AIza..."
+        api_key = "AIza..."
     """
     try:
         import streamlit as st
 
-        secao = st.secrets.get("anthropic")
-        if secao and secao.get("api_key"):
-            return secao["api_key"]
-        for nome in ("ANTHROPIC_API_KEY", "anthropic_api_key", "api_key_anthropic"):
+        bloco = st.secrets.get(secao)
+        if bloco and bloco.get("api_key"):
+            return bloco["api_key"]
+        for nome in chaves_soltas:
             if st.secrets.get(nome):
                 return st.secrets[nome]
     except Exception:  # sem Streamlit, ou secrets ausente: cai no ambiente
         pass
-    return os.environ.get("ANTHROPIC_API_KEY")
+    for nome in variaveis:
+        if os.environ.get(nome):
+            return os.environ[nome]
+    return None
+
+
+def chave_gemini():
+    return _dos_secrets("gemini", ("GEMINI_API_KEY", "GOOGLE_API_KEY", "gemini_api_key"),
+                        ("GEMINI_API_KEY", "GOOGLE_API_KEY"))
+
+
+def chave_anthropic():
+    return _dos_secrets("anthropic", ("ANTHROPIC_API_KEY", "anthropic_api_key",
+                                      "api_key_anthropic"),
+                        ("ANTHROPIC_API_KEY",))
+
+
+# Compatibilidade: o nome antigo continua valendo para a Anthropic.
+chave_api = chave_anthropic
+
+
+def provedor():
+    """Quem vai ler a foto: "gemini", "anthropic", ou None se não há chave.
+
+    O Gemini vem primeiro quando os dois estão configurados — é a opção barata,
+    e quem colar a chave da Anthropic depois provavelmente quer justamente
+    trocar. Para fixar um dos dois, ponha nos secrets:
+
+        [cupom]
+        provedor = "anthropic"
+    """
+    escolhido = None
+    try:
+        import streamlit as st
+
+        bloco = st.secrets.get("cupom")
+        if bloco and bloco.get("provedor"):
+            escolhido = str(bloco["provedor"]).strip().lower()
+    except Exception:
+        pass
+    escolhido = escolhido or os.environ.get("CUPOM_PROVEDOR", "").strip().lower() or None
+
+    disponiveis = {"gemini": chave_gemini(), "anthropic": chave_anthropic()}
+    if escolhido in disponiveis and disponiveis[escolhido]:
+        return escolhido
+    for nome in ("gemini", "anthropic"):   # ordem de preferência: o mais barato
+        if disponiveis[nome]:
+            return nome
+    return None
 
 
 def configurado():
-    return bool(chave_api())
+    return provedor() is not None
 
 
 def mime_de(nome_arquivo):
@@ -256,21 +340,58 @@ def interpretar(resposta, hoje=None):
     }
 
 
-def ler(imagem, nome_arquivo="foto.jpg", hoje=None):
-    """Manda a foto para o modelo e devolve o que ele leu, já conferido."""
-    chave = chave_api()
-    if not chave:
-        raise LeituraIndisponivel(
-            "A leitura por foto precisa de uma chave da API da Anthropic "
-            "configurada em `anthropic.api_key` nos secrets do app."
-        )
+def texto_da_resposta_gemini(dados):
+    """Extrai o texto da resposta do Gemini.
 
+    Função pura, para ser testada sem rede — e tolerante de propósito: usa o
+    atalho `output_text` quando existe e, se ele sumir numa versão futura da
+    API, cai para os blocos de `steps`. Formato que muda em silêncio é o tipo
+    de coisa que só aparece no caixa da loja.
+    """
+    if not isinstance(dados, dict):
+        return ""
+    atalho = dados.get("output_text")
+    if isinstance(atalho, str) and atalho.strip():
+        return atalho
+
+    pedacos = []
+    for passo in dados.get("steps") or []:
+        if not isinstance(passo, dict):
+            continue
+        for bloco in passo.get("content") or []:
+            if isinstance(bloco, dict) and isinstance(bloco.get("text"), str):
+                pedacos.append(bloco["text"])
+    return "".join(pedacos)
+
+
+def _ler_gemini(imagem, nome_arquivo, chave):
+    import httpx
+
+    corpo = {
+        "model": MODELO_GEMINI,
+        "input": [
+            {"type": "text", "text": INSTRUCAO},
+            {"type": "image",
+             "mime_type": mime_de(nome_arquivo),
+             "data": base64.standard_b64encode(imagem).decode("ascii")},
+        ],
+    }
+    resposta = httpx.post(
+        GEMINI_URL, json=corpo, timeout=90.0,
+        headers={"x-goog-api-key": chave, "Content-Type": "application/json"},
+    )
+    if resposta.status_code >= 400:
+        raise LeituraIndisponivel(explicar_falha_http(resposta.status_code, resposta.text))
+    return texto_da_resposta_gemini(resposta.json())
+
+
+def _ler_anthropic(imagem, nome_arquivo, chave):
     import anthropic
 
     cliente = anthropic.Anthropic(api_key=chave)
     try:
         resposta = cliente.messages.create(
-            model=MODELO,
+            model=MODELO_ANTHROPIC,
             max_tokens=600,
             messages=[{
                 "role": "user",
@@ -287,6 +408,32 @@ def ler(imagem, nome_arquivo="foto.jpg", hoje=None):
     except Exception as erro:  # chave, cota, permissão, rede
         raise LeituraIndisponivel(explicar_falha(erro)) from erro
 
-    texto = "".join(bloco.text for bloco in resposta.content
-                    if getattr(bloco, "type", "") == "text")
+    return "".join(bloco.text for bloco in resposta.content
+                   if getattr(bloco, "type", "") == "text")
+
+
+def ler(imagem, nome_arquivo="foto.jpg", hoje=None):
+    """Manda a foto para o modelo e devolve o que ele leu, já conferido.
+
+    Qual modelo é detalhe de infraestrutura: os dois devolvem texto, e quem
+    transforma texto em lançamento é `interpretar()` — a mesma função, com os
+    mesmos testes, valha qual valer o provedor.
+    """
+    quem = provedor()
+    if not quem:
+        raise LeituraIndisponivel(
+            "A leitura por foto precisa de uma chave de API configurada nos "
+            "secrets do app — `[gemini] api_key` ou `[anthropic] api_key`."
+        )
+
+    if quem == "gemini":
+        texto = _ler_gemini(imagem, nome_arquivo, chave_gemini())
+    else:
+        texto = _ler_anthropic(imagem, nome_arquivo, chave_anthropic())
+
+    if not texto.strip():
+        raise LeituraIndisponivel(
+            "O serviço respondeu, mas sem texto. Tente de novo; se persistir, "
+            "pode ser mudança no formato da resposta."
+        )
     return interpretar(texto, hoje)

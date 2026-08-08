@@ -235,8 +235,101 @@ def mensagens_de_falha():
     return falhas
 
 
+def provedores():
+    """Escolha do provedor e leitura da resposta do Gemini — sem rede."""
+    import os, sys, types
+    falhas = []
+    print("\nEscolha de provedor:")
+
+    class SecretsFalso(dict):
+        def get(self, k, d=None): return dict.get(self, k, d)
+
+    falso = types.ModuleType("streamlit")
+    original = sys.modules.get("streamlit")
+    sys.modules["streamlit"] = falso
+    guardado = {k: os.environ.pop(k, None)
+                for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY",
+                          "CUPOM_PROVEDOR")}
+    try:
+        casos = (
+            ("só Gemini", {"gemini": SecretsFalso({"api_key": "AIza-x"})}, "gemini"),
+            ("só Anthropic", {"anthropic": SecretsFalso({"api_key": "sk-ant-x"})}, "anthropic"),
+            # Com os dois, ganha o barato.
+            ("os dois", {"gemini": SecretsFalso({"api_key": "AIza-x"}),
+                         "anthropic": SecretsFalso({"api_key": "sk-ant-x"})}, "gemini"),
+            # ...a menos que o usuário fixe nos secrets.
+            ("os dois, fixado", {"gemini": SecretsFalso({"api_key": "AIza-x"}),
+                                 "anthropic": SecretsFalso({"api_key": "sk-ant-x"}),
+                                 "cupom": SecretsFalso({"provedor": "anthropic"})}, "anthropic"),
+            # Fixar um provedor sem chave não pode cegar o outro.
+            ("fixado sem chave", {"gemini": SecretsFalso({"api_key": "AIza-x"}),
+                                  "cupom": SecretsFalso({"provedor": "anthropic"})}, "gemini"),
+            ("nenhuma chave", {}, None),
+        )
+        for rotulo, secrets, esperado in casos:
+            falso.secrets = SecretsFalso(secrets)
+            obtido = cupom.provedor()
+            ok = obtido == esperado
+            print(f"  {rotulo:22} -> {str(obtido):10} {'ok' if ok else 'ERRADO'}")
+            if not ok:
+                falhas.append(f"provedor com {rotulo}: {obtido}, esperado {esperado}")
+
+        falso.secrets = SecretsFalso({})
+        ok = not cupom.configurado()
+        print(f"  configurado() sem chave: {cupom.configurado()}   {'ok' if ok else 'ERRADO'}")
+        if not ok:
+            falhas.append("configurado() disse sim sem nenhuma chave")
+    finally:
+        if original is not None:
+            sys.modules["streamlit"] = original
+        else:
+            sys.modules.pop("streamlit", None)
+        for k, v in guardado.items():
+            if v is not None:
+                os.environ[k] = v
+
+    print("\nResposta do Gemini:")
+    corpo = '{"valor": 76.32, "forma": "dinheiro"}'
+    casos = (
+        ("atalho output_text", {"output_text": corpo}, corpo),
+        # Se o atalho sumir numa versão futura, os blocos ainda salvam.
+        ("só steps", {"steps": [{"type": "model_output",
+                                 "content": [{"type": "text", "text": corpo}]}]}, corpo),
+        ("steps em pedaços", {"steps": [{"content": [{"text": '{"valor": 10,'},
+                                                     {"text": ' "forma": "pix"}'}]}]},
+         '{"valor": 10, "forma": "pix"}'),
+        ("resposta vazia", {}, ""),
+        ("lixo", "não é dicionário", ""),
+    )
+    for rotulo, dados, esperado in casos:
+        obtido = cupom.texto_da_resposta_gemini(dados)
+        ok = obtido == esperado
+        print(f"  {rotulo:20} {'ok' if ok else 'ERRADO'}")
+        if not ok:
+            falhas.append(f"texto do Gemini ({rotulo}): {obtido!r}")
+
+    # E o texto extraído tem de atravessar a interpretação normalmente.
+    lido = cupom.interpretar(cupom.texto_da_resposta_gemini({"output_text": corpo}), HOJE)
+    ok = lido["valor"] == 76.32 and lido["forma"] == "dinheiro"
+    print(f"  Gemini -> interpretar(): R$ {lido['valor']} {lido['forma']}   "
+          f"{'ok' if ok else 'ERRADO'}")
+    if not ok:
+        falhas.append("a resposta do Gemini não atravessou interpretar()")
+
+    print("\nMensagens de erro HTTP do Gemini:")
+    for status, esperado in ((401, "chave"), (403, "chave"), (429, "500 leituras"),
+                             (503, "fora do ar")):
+        msg = cupom.explicar_falha_http(status, "")
+        ok = esperado in msg and "foto mais nítida" not in msg
+        print(f"  HTTP {status}: {'ok' if ok else 'ERRADO'}")
+        if not ok:
+            falhas.append(f"mensagem do HTTP {status} não orienta direito")
+
+    return falhas
+
+
 if __name__ == "__main__":
-    problemas = leitura() + mensagens_de_falha() + debito_e_credito() + foto_vira_anexo()
+    problemas = leitura() + provedores() + mensagens_de_falha() + debito_e_credito() + foto_vira_anexo()
     if problemas:
         print("\nFALHOU:\n  " + "\n  ".join(problemas))
     else:
