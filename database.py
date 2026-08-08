@@ -538,22 +538,70 @@ def _filtro_previsto(grupo_id, conta_id, categoria_id):
     return " AND ".join(cond), params
 
 
+def pendentes_em_caixa(conn, grupo_id=None, conta_id=None, categoria_id=None):
+    """Pendentes com a data em que o dinheiro sai de verdade.
+
+    Compra no cartão vira a data de vencimento da fatura. Sem isso o fluxo de
+    caixa antecipa a saída para o dia da compra, e todas as compras do ciclo
+    aparecem espalhadas em vez de uma fatura só.
+    """
+    onde, params = _filtro_previsto(grupo_id, conta_id, categoria_id)
+    linhas = conn.execute(
+        f"""SELECT id, data, valor, tipo, cartao_id, descricao, conta_id, categoria_id
+            FROM lancamentos WHERE {onde}""",
+        tuple(params),
+    ).fetchall()
+    cartoes = _mapa_cartoes(conn, grupo_id)
+    for linha in linhas:
+        linha["data_caixa"] = data_de_caixa(linha, cartoes)
+    return linhas
+
+
+def faturas_previstas(conn, dias, grupo_id=None, conta_id=None):
+    """As faturas em aberto até hoje + `dias`, uma linha por cartão/vencimento.
+
+    É a tradução do que o usuário vê no aplicativo do banco: não dezoito
+    compras soltas, e sim 'Nubank, vence dia 05, R$ 3.000'.
+    """
+    limite = date.today() + timedelta(days=dias)
+    cartoes = _mapa_cartoes(conn, grupo_id)
+    if not cartoes:
+        return []
+    nomes = {c["id"]: c["nome_conta"] for c in listar_cartoes(conn, grupo_id=grupo_id)}
+
+    agrupado = {}
+    for linha in pendentes_em_caixa(conn, grupo_id, conta_id, None):
+        if not linha["cartao_id"] or linha["data_caixa"] > limite:
+            continue
+        chave = (linha["cartao_id"], linha["data_caixa"])
+        total, quantidade = agrupado.get(chave, (0.0, 0))
+        agrupado[chave] = (total + linha["valor"], quantidade + 1)
+
+    return sorted(
+        ({"cartao": nomes.get(cid, "Cartão"), "vencimento": venc,
+          "total": total, "quantidade": qtd}
+         for (cid, venc), (total, qtd) in agrupado.items()),
+        key=lambda f: f["vencimento"],
+    )
+
+
 def previsto_ate(conn, dias, grupo_id=None, conta_id=None, categoria_id=None):
-    """(entradas, saidas) pendentes de hoje até hoje + `dias`.
+    """(entradas, saidas) pendentes de hoje até hoje + `dias`, pela data em que
+    o dinheiro sai.
 
     O passado pendente entra de propósito: conta vencida e não paga continua
     sendo dinheiro que vai sair, e some da previsão se filtrar só o futuro.
     """
-    limite = (date.today() + timedelta(days=dias)).isoformat()
-    onde, params = _filtro_previsto(grupo_id, conta_id, categoria_id)
-    linha = conn.execute(
-        f"""SELECT
-              COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0) AS entradas,
-              COALESCE(SUM(CASE WHEN tipo = 'saida'   THEN valor ELSE 0 END), 0) AS saidas
-            FROM lancamentos WHERE {onde} AND data <= ?""",
-        tuple(params + [limite]),
-    ).fetchone()
-    return linha["entradas"], linha["saidas"]
+    limite = date.today() + timedelta(days=dias)
+    entradas = saidas = 0.0
+    for linha in pendentes_em_caixa(conn, grupo_id, conta_id, categoria_id):
+        if linha["data_caixa"] > limite:
+            continue
+        if linha["tipo"] == "entrada":
+            entradas += linha["valor"]
+        else:
+            saidas += linha["valor"]
+    return entradas, saidas
 
 
 def previsto_por_categoria(conn, dias, tipo, grupo_id=None, conta_id=None):
@@ -570,6 +618,61 @@ def previsto_por_categoria(conn, dias, tipo, grupo_id=None, conta_id=None):
             GROUP BY categorias.id ORDER BY total DESC""",
         tuple(params + [tipo, limite]),
     ).fetchall()
+
+
+def _dia_valido(ano, mes, dia):
+    """Encaixa o dia no mês: fechamento 31 em fevereiro vira 28 (ou 29)."""
+    if mes > 12:
+        ano, mes = ano + 1, mes - 12
+    ultimo = (date(ano + (mes == 12), (mes % 12) + 1, 1) - timedelta(days=1)).day
+    return date(ano, mes, min(dia, ultimo))
+
+
+def ciclo_fatura(data_compra, dia_fechamento, dia_vencimento):
+    """(fechamento, vencimento) da fatura em que a compra cai.
+
+    Compra ANTES do fechamento entra na fatura que fecha neste mês; no dia do
+    fechamento ou depois, já é a do mês seguinte — é assim que o cartão
+    funciona, e errar isso joga a despesa um mês inteiro fora do lugar.
+
+    O vencimento costuma cair no mês seguinte ao fechamento (fecha 25, vence
+    05). Quando o dia do vencimento é maior que o do fechamento, os dois caem
+    no mesmo mês (fecha 05, vence 15).
+    """
+    if isinstance(data_compra, str):
+        data_compra = date.fromisoformat(data_compra)
+
+    fechamento = _dia_valido(data_compra.year, data_compra.month, dia_fechamento)
+    if data_compra >= fechamento:
+        fechamento = _dia_valido(data_compra.year, data_compra.month + 1, dia_fechamento)
+
+    mes_venc = fechamento.month + (0 if dia_vencimento > dia_fechamento else 1)
+    vencimento = _dia_valido(fechamento.year, mes_venc, dia_vencimento)
+    return fechamento, vencimento
+
+
+def _mapa_cartoes(conn, grupo_id=None):
+    """{cartao_id: (dia_fechamento, dia_vencimento)} para converter data de
+    compra em data de pagamento sem ir ao banco a cada linha."""
+    return {
+        c["id"]: (c["dia_fechamento"], c["dia_vencimento"])
+        for c in listar_cartoes(conn, grupo_id=grupo_id)
+    }
+
+
+def data_de_caixa(lancamento, cartoes):
+    """Quando o dinheiro realmente sai da conta.
+
+    Para compra no cartão é o vencimento da fatura, não o dia da compra: a
+    despesa nasce na compra (competência), mas o dinheiro só sai quando a
+    fatura é paga. Usar a data da compra no fluxo de caixa antecipa a saída e
+    engana a projeção.
+    """
+    cartao_id = lancamento.get("cartao_id")
+    if not cartao_id or cartao_id not in cartoes:
+        return date.fromisoformat(lancamento["data"])
+    fechamento, vencimento = cartoes[cartao_id]
+    return ciclo_fatura(lancamento["data"], fechamento, vencimento)[1]
 
 
 def previsto_por_categoria_periodo(conn, inicio, fim, tipo, grupo_id=None, conta_id=None):
@@ -600,24 +703,19 @@ def projecao_saldo(conn, dias, grupo_id=None, conta_id=None, categoria_id=None):
     """
     hoje = date.today()
     saldo = saldo_total(conn, grupo_id=grupo_id)
-
-    onde, params = _filtro_previsto(grupo_id, conta_id, categoria_id)
-    limite = (hoje + timedelta(days=dias)).isoformat()
-    linhas = conn.execute(
-        f"""SELECT data,
-              COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0) AS entradas,
-              COALESCE(SUM(CASE WHEN tipo = 'saida'   THEN valor ELSE 0 END), 0) AS saidas
-            FROM lancamentos WHERE {onde} AND data <= ?
-            GROUP BY data ORDER BY data""",
-        tuple(params + [limite]),
-    ).fetchall()
+    limite = hoje + timedelta(days=dias)
 
     # Pendente com data passada pesa no primeiro dia: já era para ter saído.
     por_dia = {}
-    for linha in linhas:
-        dia = max(date.fromisoformat(linha["data"]), hoje)
+    for linha in pendentes_em_caixa(conn, grupo_id, conta_id, categoria_id):
+        if linha["data_caixa"] > limite:
+            continue
+        dia = max(linha["data_caixa"], hoje)
         entradas, saidas = por_dia.get(dia, (0.0, 0.0))
-        por_dia[dia] = (entradas + linha["entradas"], saidas + linha["saidas"])
+        if linha["tipo"] == "entrada":
+            por_dia[dia] = (entradas + linha["valor"], saidas)
+        else:
+            por_dia[dia] = (entradas, saidas + linha["valor"])
 
     pontos = []
     for passo in range(dias + 1):

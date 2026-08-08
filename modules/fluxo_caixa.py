@@ -100,6 +100,11 @@ def _previsto_realizado(conn, grupo_id, contas):
         st.info("Nenhum lançamento neste período.")
         return
 
+    st.caption(
+        "Por **competência**: a compra no cartão conta no mês em que foi feita, "
+        "não no mês em que a fatura é paga. Para ver o dinheiro saindo da conta, "
+        "use a visão 📈 Projeção."
+    )
     _cabecalho_pr(serie, periodo)
     _grafico_pr(serie, modo, series)
 
@@ -322,6 +327,30 @@ def _projecao(conn, grupo_id, contas):
         )
     else:
         st.success(f"O saldo não fica negativo nos próximos {dias} dias.")
+
+    faturas = db.faturas_previstas(conn, dias, grupo_id=grupo_id, conta_id=conta_id)
+    if faturas:
+        st.markdown("##### 💳 Faturas de cartão no período")
+        st.caption(
+            "A compra vira despesa no dia em que foi feita, mas o dinheiro só sai "
+            "quando a fatura vence — é nesta data que ela entra na projeção."
+        )
+        linhas = "".join(
+            f"<div style='display:flex;align-items:center;gap:8px;padding:7px 10px;"
+            f"border-bottom:1px solid {theme.BORDER};'>"
+            f"<span style='flex:1;font-weight:600;'>💳 {theme.esc(f['cartao'])}"
+            f"<span style='color:{theme.TEXT_MUTED};font-weight:400;font-size:0.75rem;'>"
+            f" · vence {theme.data_br(f['vencimento'].isoformat())}"
+            f" · {f['quantidade']} compra(s)</span></span>"
+            f"<span style='font-weight:700;color:{theme.RED};'>"
+            f"{theme.moeda_md(f['total'])}</span></div>"
+            for f in faturas
+        )
+        st.markdown(
+            f"<div style='background:{theme.CARD};border:1px solid {theme.BORDER};"
+            f"border-radius:12px;overflow:hidden;margin-bottom:10px;'>{linhas}</div>",
+            unsafe_allow_html=True,
+        )
 
     df = pd.DataFrame(
         [(d, s, e, sa) for d, s, e, sa in agrupados],
