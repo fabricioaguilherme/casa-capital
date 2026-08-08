@@ -8,7 +8,7 @@ uma categoria de um grupo para outro, ou deixar alguém apagar item de fábrica
 e sumir com a opção para todas as famílias de uma vez.
 
 Também cobre a recusa em apagar categoria em uso: sem isso, lançamentos
-ficariam apontando para o vazio e o DRE pararia de somar aquele gasto sem
+ficariam apontando para o vazio e a análise por categoria pararia de somar aquele gasto sem
 avisar ninguém.
 """
 

@@ -1215,7 +1215,7 @@ def deletar_categoria(conn, categoria_id, grupo_id):
     """(apagou, motivo). Recusa se estiver em uso ou se for item de fábrica.
 
     Apagar uma categoria usada deixaria lançamentos apontando para o vazio, e o
-    DRE pararia de somar aquele gasto sem avisar ninguém.
+    análise por categoria pararia de somar aquele gasto sem avisar ninguém.
     """
     em_uso = contar_lancamentos_categoria(conn, categoria_id)
     if em_uso:

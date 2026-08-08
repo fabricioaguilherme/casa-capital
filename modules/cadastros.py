@@ -232,7 +232,7 @@ def _cartoes(conn, grupo_id):
 
 def _categorias(conn, grupo_id):
     st.markdown("#### ➕ Nova categoria")
-    st.caption("Serve para agrupar os lançamentos no DRE e nos gráficos.")
+    st.caption("Serve para agrupar os lançamentos na análise por categoria e nos gráficos.")
 
     with st.form("cad_nova_categoria", clear_on_submit=True):
         c1, c2, c3 = st.columns([2.5, 1.5, 1], vertical_alignment="bottom")
