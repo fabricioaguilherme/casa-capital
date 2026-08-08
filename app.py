@@ -404,6 +404,6 @@ with cab_esq:
 with cab_dir:
     # O "?" vive aqui, e não dentro de cada módulo, para toda tela ganhar de
     # graça: basta a tela existir em conteudo_ajuda.py.
-    ajuda.botao(titulo)
+    ajuda.botao(titulo, conn)
 
 render(conn, usuario)

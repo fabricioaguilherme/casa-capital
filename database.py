@@ -184,6 +184,16 @@ def _migrar_schema(conn):
         nome TEXT NOT NULL,
         grupo_id INTEGER REFERENCES grupos(id)
     );
+
+    -- Link do vídeo de ajuda de cada tela. Fica no banco, e não no código,
+    -- para o dono colar um vídeo novo sem precisar publicar versão. Sem
+    -- grupo_id de propósito: a ajuda é do sistema, igual para todas as
+    -- famílias — por isso só o super admin edita.
+    CREATE TABLE IF NOT EXISTS ajuda_videos (
+        tela TEXT PRIMARY KEY,
+        url TEXT NOT NULL,
+        atualizado_em TEXT DEFAULT (datetime('now'))
+    );
     """)
     _seed_formas_pagamento(conn)
 
@@ -560,6 +570,35 @@ def pendentes_em_caixa(conn, grupo_id=None, conta_id=None, categoria_id=None):
     for linha in linhas:
         linha["data_caixa"] = data_de_caixa(linha, cartoes)
     return linhas
+
+
+# ── Vídeos de ajuda ──────────────────────────────────────────────────────
+
+def videos_ajuda(conn):
+    """{tela: url} de todos os vídeos cadastrados."""
+    return {l["tela"]: l["url"]
+            for l in conn.execute("SELECT tela, url FROM ajuda_videos").fetchall()}
+
+
+def video_ajuda(conn, tela):
+    linha = conn.execute("SELECT url FROM ajuda_videos WHERE tela = ?", (tela,)).fetchone()
+    return linha["url"] if linha else ""
+
+
+def salvar_video_ajuda(conn, tela, url):
+    """Grava ou apaga o vídeo de uma tela. URL vazia remove o registro."""
+    url = (url or "").strip()
+    if not url:
+        conn.execute("DELETE FROM ajuda_videos WHERE tela = ?", (tela,))
+    else:
+        conn.execute(
+            """INSERT INTO ajuda_videos (tela, url, atualizado_em)
+               VALUES (?, ?, datetime('now'))
+               ON CONFLICT(tela) DO UPDATE SET url = excluded.url,
+                                               atualizado_em = datetime('now')""",
+            (tela, url),
+        )
+    conn.commit()
 
 
 # ── Importação de extrato e conciliação ──────────────────────────────────
