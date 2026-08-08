@@ -199,8 +199,44 @@ def foto_vira_anexo():
     return falhas
 
 
+def mensagens_de_falha():
+    """Cada erro tem de dizer o que fazer — e não mandar tirar outra foto."""
+    falhas = []
+    print("\nMensagens de falha do serviço:")
+
+    class AuthenticationError(Exception): pass
+    class RateLimitError(Exception): pass
+    class APIConnectionError(Exception): pass
+
+    casos = (
+        (AuthenticationError("Error code: 401 - {'type': 'error', 'error': "
+                             "{'type': 'authentication_error', 'message': 'invalid x-api-key'}}"),
+         "chave", "sk-ant-api03-"),
+        (Exception("Error code: 400 - your credit balance is too low"),
+         "sem crédito", "Billing"),
+        (RateLimitError("rate_limit_error"), "limite", "Espere"),
+        (APIConnectionError("connection error"), "conexão", "rede"),
+    )
+    for erro, rotulo, esperado in casos:
+        msg = cupom.explicar_falha(erro)
+        ok = esperado in msg and "foto mais nítida" not in msg
+        print(f"  {rotulo}: {'ok' if ok else 'ERRADO'} — {msg.splitlines()[0][:60]}…")
+        if not ok:
+            falhas.append(f"mensagem de {rotulo} não orienta direito")
+
+    # E o principal: erro de chave NÃO pode ser tratado como foto ruim.
+    ok = issubclass(cupom.LeituraIndisponivel, Exception) and \
+         not issubclass(cupom.LeituraIndisponivel, cupom.CupomIlegivel)
+    print(f"  falha de serviço é exceção separada da foto ilegível: "
+          f"{'ok' if ok else 'ERRADO'}")
+    if not ok:
+        falhas.append("LeituraIndisponivel não está separada de CupomIlegivel")
+
+    return falhas
+
+
 if __name__ == "__main__":
-    problemas = leitura() + debito_e_credito() + foto_vira_anexo()
+    problemas = leitura() + mensagens_de_falha() + debito_e_credito() + foto_vira_anexo()
     if problemas:
         print("\nFALHOU:\n  " + "\n  ".join(problemas))
     else:

@@ -66,6 +66,48 @@ class CupomIlegivel(Exception):
     """A foto não deu para ler, ou não era um comprovante."""
 
 
+class LeituraIndisponivel(Exception):
+    """O serviço de leitura não respondeu — chave, cota, rede.
+
+    Separado de `CupomIlegivel` de propósito: mandar tirar outra foto quando o
+    problema é a chave da API faz a pessoa fotografar o cupom cinco vezes até
+    desistir. O erro é de configuração, e a mensagem tem que dizer isso.
+    """
+
+
+def explicar_falha(erro):
+    """Traduz a exceção da API para uma frase que diga o que fazer.
+
+    Função pura, sem rede e sem tela — é o que permite testar as mensagens.
+    """
+    tipo = type(erro).__name__
+    texto = str(erro)
+
+    if "authentication_error" in texto or "invalid x-api-key" in texto or tipo == "AuthenticationError":
+        return ("A chave da API foi recusada (**401 · invalid x-api-key**). Ela chegou "
+                "até a Anthropic, então o problema não é a foto nem o app: é a chave em si.\n\n"
+                "Confira nos secrets: precisa ser uma chave de **console.anthropic.com → "
+                "API keys**, começando com `sk-ant-api03-`, colada inteira, sem espaço "
+                "nem aspas sobrando. Chave apagada no console também dá este erro.")
+
+    if "credit balance" in texto or "insufficient" in texto.lower():
+        return ("A conta da Anthropic está **sem crédito**. A chave é válida; falta saldo. "
+                "Adicione crédito em console.anthropic.com → Billing.")
+
+    if tipo == "PermissionDeniedError" or "permission" in texto.lower():
+        return ("A chave é válida mas **não tem permissão** para este modelo. "
+                "Confira o workspace da chave no console.")
+
+    if tipo == "RateLimitError" or "rate_limit" in texto:
+        return "Muitas leituras em pouco tempo. Espere alguns segundos e tente de novo."
+
+    if tipo in ("APIConnectionError", "APITimeoutError") or "connection" in texto.lower():
+        return ("Não consegui falar com a Anthropic — conexão. Tente de novo; "
+                "se persistir, é rede.")
+
+    return f"A leitura falhou: {texto}"
+
+
 def chave_api():
     """A chave dos secrets do Streamlit ou do ambiente — o que houver.
 
@@ -218,7 +260,7 @@ def ler(imagem, nome_arquivo="foto.jpg", hoje=None):
     """Manda a foto para o modelo e devolve o que ele leu, já conferido."""
     chave = chave_api()
     if not chave:
-        raise CupomIlegivel(
+        raise LeituraIndisponivel(
             "A leitura por foto precisa de uma chave da API da Anthropic "
             "configurada em `anthropic.api_key` nos secrets do app."
         )
@@ -226,21 +268,25 @@ def ler(imagem, nome_arquivo="foto.jpg", hoje=None):
     import anthropic
 
     cliente = anthropic.Anthropic(api_key=chave)
-    resposta = cliente.messages.create(
-        model=MODELO,
-        max_tokens=600,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "image", "source": {
-                    "type": "base64",
-                    "media_type": mime_de(nome_arquivo),
-                    "data": base64.standard_b64encode(imagem).decode("ascii"),
-                }},
-                {"type": "text", "text": INSTRUCAO},
-            ],
-        }],
-    )
+    try:
+        resposta = cliente.messages.create(
+            model=MODELO,
+            max_tokens=600,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {
+                        "type": "base64",
+                        "media_type": mime_de(nome_arquivo),
+                        "data": base64.standard_b64encode(imagem).decode("ascii"),
+                    }},
+                    {"type": "text", "text": INSTRUCAO},
+                ],
+            }],
+        )
+    except Exception as erro:  # chave, cota, permissão, rede
+        raise LeituraIndisponivel(explicar_falha(erro)) from erro
+
     texto = "".join(bloco.text for bloco in resposta.content
                     if getattr(bloco, "type", "") == "text")
     return interpretar(texto, hoje)

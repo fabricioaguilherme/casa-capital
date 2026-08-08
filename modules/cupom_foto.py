@@ -120,10 +120,13 @@ def _capturar():
             try:
                 lido = cupom.ler(imagem, nome)
             except cupom.CupomIlegivel as erro:
-                st.session_state[FALHA] = str(erro)
+                st.session_state[FALHA] = (str(erro), True)   # a foto
                 lido = None
-            except Exception as erro:  # rede fora, chave inválida, cota
-                st.session_state[FALHA] = f"A leitura falhou: {erro}"
+            except cupom.LeituraIndisponivel as erro:
+                st.session_state[FALHA] = (str(erro), False)  # a configuração
+                lido = None
+            except Exception as erro:  # imprevisto
+                st.session_state[FALHA] = (cupom.explicar_falha(erro), False)
                 lido = None
 
         st.session_state[FOTO] = {"dados": imagem, "nome": nome}
@@ -142,11 +145,15 @@ def _capturar():
         st.rerun()
 
     if st.session_state.get(FALHA):
-        st.error(
-            f"{st.session_state[FALHA]}\n\n"
-            "Tente uma foto mais nítida — ou use **✏️ Preencher na mão**, que "
-            "guarda esta mesma foto como comprovante."
-        )
+        mensagem, da_foto = st.session_state[FALHA]
+        # Mandar tirar outra foto quando o problema é a chave da API faz a
+        # pessoa fotografar cinco vezes até desistir. Cada erro, seu conselho.
+        conselho = ("Tente uma foto mais nítida — ou use **✏️ Preencher na mão**, "
+                    "que guarda esta mesma foto como comprovante."
+                    if da_foto else
+                    "**Isto não é problema da foto.** Enquanto não for resolvido, "
+                    "use **✏️ Preencher na mão** — a foto fica anexada do mesmo jeito.")
+        st.error(f"{mensagem}\n\n{conselho}")
 
 
 def _em_branco():
