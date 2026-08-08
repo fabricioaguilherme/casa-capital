@@ -5,7 +5,7 @@ import auth
 import theme
 from modules import (
     dashboard, fluxo_caixa, contas_pagar_receber, cartao_credito,
-    patrimonio, investimentos, metas, admin, backup, cadastros, importar,
+    patrimonio, investimentos, metas, admin, configuracoes, ajuda,
 )
 
 st.set_page_config(
@@ -353,9 +353,7 @@ PAGINAS = {
     "🏠  Patrimônio": ("Patrimônio", "Bens, dívidas e patrimônio líquido.", patrimonio.render),
     "💹  Investimentos": ("Investimentos", "Carteira, aportes e rentabilidade.", investimentos.render),
     "🎯  Metas": ("Metas", "Objetivos financeiros e progresso.", metas.render),
-    "📥  Importar extrato": ("Importar extrato", "Suba o OFX do banco e concilie com o que já lançou.", importar.render),
-    "💾  Backup": ("Backup", "Baixe uma cópia dos seus dados.", backup.render),
-    "⚙️  Cadastros": ("Cadastros", "Contas, cartões, categorias e formas de pagamento.", cadastros.render),
+    "⚙️  Configurações": ("Configurações", "Cadastros, backup e ajuda.", configuracoes.render),
 }
 
 # Administração: visível somente para admins
@@ -394,11 +392,18 @@ with st.sidebar:
         auth.logout(conn)
 
 titulo, descricao, render = PAGINAS[escolha]
-st.markdown(
-    f"""<div class="pagina-topo">
-    <div class="pagina-titulo">{titulo}</div>
-    <p class="pagina-desc">{descricao}</p>
-    </div>""",
-    unsafe_allow_html=True,
-)
+cab_esq, cab_dir = st.columns([4, 1], vertical_alignment="center")
+with cab_esq:
+    st.markdown(
+        f"""<div class="pagina-topo">
+        <div class="pagina-titulo">{titulo}</div>
+        <p class="pagina-desc">{descricao}</p>
+        </div>""",
+        unsafe_allow_html=True,
+    )
+with cab_dir:
+    # O "?" vive aqui, e não dentro de cada módulo, para toda tela ganhar de
+    # graça: basta a tela existir em conteudo_ajuda.py.
+    ajuda.botao(titulo)
+
 render(conn, usuario)

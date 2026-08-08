@@ -24,9 +24,10 @@ import streamlit as st
 
 import database as db
 import theme
-from modules import anexos
+from modules import anexos, importar
 
-VISOES = ["📊  Saldo atual", "📉  Previsto × Realizado", "📈  Projeção", "📋  Lançamentos"]
+VISOES = ["📊  Saldo atual", "📉  Previsto × Realizado", "📈  Projeção",
+          "📋  Lançamentos", "📥  Importar extrato"]
 
 AGRUPAMENTOS = {"Mensal": "mensal", "Semanal": "semanal", "Diário": "diario"}
 
@@ -57,8 +58,12 @@ def render(conn, usuario):
         _previsto_realizado(conn, grupo_id, contas)
     elif visao == VISOES[2]:
         _projecao(conn, grupo_id, contas)
-    else:
+    elif visao == VISOES[3]:
         _lancamentos(conn, usuario, contas)
+    else:
+        # Importar extrato é operação de caixa, não configuração — por isso
+        # entra aqui. O módulo segue separado; só a porta de entrada é esta.
+        importar.render(conn, usuario)
 
 
 # ── Previsto × Realizado ─────────────────────────────────────────────────
