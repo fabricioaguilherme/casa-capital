@@ -67,12 +67,26 @@ class CupomIlegivel(Exception):
 
 
 def chave_api():
-    """A chave dos secrets do Streamlit ou do ambiente — o que houver."""
+    """A chave dos secrets do Streamlit ou do ambiente — o que houver.
+
+    Aceita as duas formas de colar nos secrets, porque as duas são naturais e
+    ficar sem leitura por causa de um colchete seria bobagem:
+
+        [anthropic]                      ANTHROPIC_API_KEY = "sk-ant-..."
+        api_key = "sk-ant-..."
+
+    (A segunda o Streamlit também exporta para o ambiente, mas ler direto
+    evita depender desse detalhe.)
+    """
     try:
         import streamlit as st
 
-        if "anthropic" in st.secrets and st.secrets["anthropic"].get("api_key"):
-            return st.secrets["anthropic"]["api_key"]
+        secao = st.secrets.get("anthropic")
+        if secao and secao.get("api_key"):
+            return secao["api_key"]
+        for nome in ("ANTHROPIC_API_KEY", "anthropic_api_key", "api_key_anthropic"):
+            if st.secrets.get(nome):
+                return st.secrets[nome]
     except Exception:  # sem Streamlit, ou secrets ausente: cai no ambiente
         pass
     return os.environ.get("ANTHROPIC_API_KEY")
