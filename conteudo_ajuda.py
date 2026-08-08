@@ -62,21 +62,6 @@ lançou.
                       "daquele cartão por pagas; só o que não bate com nada vira lançamento novo.\n\n"
                       "Pode subir o mesmo arquivo quantas vezes quiser.",
              "video": ""},
-            {"titulo": "Lançar pela foto do cupom",
-             "texto": "Em **📷 Foto do cupom** você fotografa o cupom fiscal ou o canhoto da "
-                      "maquininha — pelo celular a câmera abre direto; pelo computador dá para "
-                      "enviar a imagem. O sistema lê valor, data e estabelecimento, e **você "
-                      "confere antes de lançar**: número lido errado não dá erro, dá um valor "
-                      "parecido.\n\n"
-                      "**Débito e crédito seguem caminhos diferentes.** No débito o dinheiro sai "
-                      "da conta na data da compra. No crédito a compra entra na fatura do cartão "
-                      "e o dinheiro só sai no vencimento — a despesa conta hoje, o caixa sente "
-                      "depois.\n\n"
-                      "Se o canhoto não disser qual dos dois foi, a tela pergunta em vez de "
-                      "chutar. E se já existir uma conta a pagar do mesmo valor por perto, ela "
-                      "oferece dar baixa nela em vez de criar outra.\n\n"
-                      "A foto fica anexada ao lançamento, como comprovante.",
-             "video": ""},
         ],
     },
 
@@ -168,6 +153,33 @@ Enquanto o Fluxo de Caixa cuida do mês, aqui é o acúmulo.
                       "o dinheiro numa conta à parte.",
              "video": ""},
         ],
+    },
+
+    "Foto do Cupom": {
+        "texto": """
+Fotografe o **cupom fiscal** ou o **canhoto da maquininha** e o sistema lê o
+valor, a data e o estabelecimento. Pelo celular a câmera abre direto; pelo
+computador dá para enviar a imagem.
+
+**Confira antes de lançar.** Valor lido errado não dá erro — dá um número
+parecido, que entra no caixa sem ninguém notar. Por isso os campos vêm
+preenchidos, mas editáveis, com a foto do lado.
+
+**Débito e crédito não são a mesma coisa:**
+
+- **débito** (e Pix, e dinheiro) — o dinheiro sai da conta na data da compra
+- **crédito** — a compra entra na fatura do cartão e o dinheiro só sai no
+  vencimento; a despesa conta hoje, o caixa sente depois
+
+Se o canhoto não disser qual dos dois foi, a tela pergunta em vez de chutar:
+errar entre eles desloca a saída em até um mês na projeção.
+
+E se já existir uma conta a pagar do mesmo valor por perto, ela oferece dar
+baixa nela em vez de criar outra — a mesma regra do extrato.
+
+A foto fica anexada ao lançamento, como comprovante.
+""",
+        "video": "",
     },
 
     "Importar extrato (dentro do Fluxo de Caixa)": {

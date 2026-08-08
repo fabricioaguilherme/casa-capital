@@ -5,7 +5,7 @@ import auth
 import theme
 from modules import (
     dashboard, fluxo_caixa, contas_pagar_receber, cartao_credito,
-    admin, configuracoes, ajuda, patrimonio_geral,
+    admin, configuracoes, ajuda, cupom_foto, patrimonio_geral,
 )
 
 st.set_page_config(
@@ -350,6 +350,10 @@ PAGINAS = {
     "📤  A Pagar": ("Contas a Pagar", "Despesas em aberto e futuras.", contas_pagar_receber.render_a_pagar),
     "📥  A Receber": ("Contas a Receber", "Receitas previstas ainda não recebidas.", contas_pagar_receber.render_a_receber),
     "💳  Cartão": ("Cartão de Crédito", "Faturas e compras parceladas.", cartao_credito.render),
+    # Menu próprio, e não uma visão dentro do Fluxo de Caixa: é a única tela
+    # que se usa em pé, no caixa da loja, com o celular na mão — dois toques
+    # a mais já é motivo para não usar.
+    "📷  Foto do Cupom": ("Foto do Cupom", "Lance a compra fotografando o comprovante.", cupom_foto.render),
     "🏠  Patrimônio": ("Patrimônio", "Bens, dívidas, investimentos e metas.", patrimonio_geral.render),
     "⚙️  Configurações": ("Configurações", "Cadastros, backup e ajuda.", configuracoes.render),
 }
