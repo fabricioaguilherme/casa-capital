@@ -5,7 +5,7 @@ import auth
 import theme
 from modules import (
     dashboard, fluxo_caixa, contas_pagar_receber, cartao_credito,
-    patrimonio, investimentos, metas, admin, configuracoes, ajuda,
+    admin, configuracoes, ajuda, patrimonio_geral,
 )
 
 st.set_page_config(
@@ -350,9 +350,7 @@ PAGINAS = {
     "📤  A Pagar": ("Contas a Pagar", "Despesas em aberto e futuras.", contas_pagar_receber.render_a_pagar),
     "📥  A Receber": ("Contas a Receber", "Receitas previstas ainda não recebidas.", contas_pagar_receber.render_a_receber),
     "💳  Cartão": ("Cartão de Crédito", "Faturas e compras parceladas.", cartao_credito.render),
-    "🏠  Patrimônio": ("Patrimônio", "Bens, dívidas e patrimônio líquido.", patrimonio.render),
-    "💹  Investimentos": ("Investimentos", "Carteira, aportes e rentabilidade.", investimentos.render),
-    "🎯  Metas": ("Metas", "Objetivos financeiros e progresso.", metas.render),
+    "🏠  Patrimônio": ("Patrimônio", "Bens, dívidas, investimentos e metas.", patrimonio_geral.render),
     "⚙️  Configurações": ("Configurações", "Cadastros, backup e ajuda.", configuracoes.render),
 }
 

@@ -119,31 +119,40 @@ Compra feita **no dia** do fechamento já entra na fatura seguinte.
 
     "Patrimônio": {
         "texto": """
-O que você tem e o que você deve. Bens menos dívidas, mais o saldo em contas e
-investimentos, dá o patrimônio líquido.
+O longo prazo, em três seções.
 
-Atualize os valores de tempos em tempos — imóvel e carro mudam de preço.
+**💼 Bens e dívidas** — o que você tem e o que deve. Bens menos dívidas, mais
+o saldo em contas e investimentos, dá o **patrimônio líquido**.
+
+**💹 Investimentos** — a carteira: quanto aportou, quanto vale hoje, e a
+rentabilidade. O valor atual você atualiza na mão; não há integração com
+corretora.
+
+**🎯 Metas** — objetivos com valor e prazo, com a barra de quanto falta.
+
+Estão juntos porque são o mesmo dinheiro em três tempos: o que já é seu, o que
+está rendendo, e o que você quer que seja.
+
+Enquanto o Fluxo de Caixa cuida do mês, aqui é o acúmulo.
 """,
         "video": "",
-    },
-
-    "Investimentos": {
-        "texto": """
-Sua carteira: quanto aportou, quanto vale hoje, e a rentabilidade.
-
-O valor atual você atualiza na mão. Não há integração com corretora.
-""",
-        "video": "",
-    },
-
-    "Metas": {
-        "texto": """
-Objetivos com valor e prazo. A barra mostra quanto falta.
-
-Serve para o que você está juntando dinheiro: viagem, reserva, entrada de
-imóvel.
-""",
-        "video": "",
+        "topicos": [
+            {"titulo": "Como o patrimônio líquido é calculado",
+             "texto": "Bens + investimentos + saldo em contas − dívidas.\n\n"
+                      "Cartão de crédito não entra como conta: ele é dívida, e o que você "
+                      "deve nele aparece pelas compras lançadas.",
+             "video": ""},
+            {"titulo": "Atualizar valor de bem e de investimento",
+             "texto": "Imóvel, carro e carteira mudam de preço. Atualize de tempos em tempos, "
+                      "senão o patrimônio líquido congela num valor antigo e as decisões saem "
+                      "de uma foto vencida.",
+             "video": ""},
+            {"titulo": "Usar metas de verdade",
+             "texto": "Meta é patrimônio futuro. Cadastre valor e prazo, e acompanhe a barra.\n\n"
+                      "Guardar dinheiro para a meta é lançamento normal — o sistema não separa "
+                      "o dinheiro numa conta à parte.",
+             "video": ""},
+        ],
     },
 
     "Importar extrato (dentro do Fluxo de Caixa)": {
