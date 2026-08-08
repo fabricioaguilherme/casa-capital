@@ -6,10 +6,10 @@ O **texto** mora em `conteudo_ajuda.py` (é conteúdo escrito, versionado junto
 com o código). O **link do vídeo** mora no banco, porque o dono grava vídeo
 quando quer e não deve depender de publicar versão nova para colar um link.
 
-Por que um painel e não o balão nativo (`help=`): o balão aceita só texto
-curto, não abre vídeo e some quando o mouse sai. Para explicar um campo ele
-continua bom; para explicar uma tela, o painel cabe mais e fica aberto
-enquanto a pessoa lê.
+Por que uma janela (`st.dialog`) e não o balão nativo (`help=`): o balão aceita
+só texto curto, não abre vídeo e some quando o mouse sai. Para explicar um
+campo ele continua bom; para explicar uma tela, a janela cabe mais, abre por
+cima com a largura toda e fica aberta enquanto a pessoa lê.
 """
 
 import streamlit as st
@@ -29,43 +29,53 @@ def _url_video(conn, chave, padrao=""):
     return padrao or ""
 
 
-def botao(titulo, conn=None):
-    """Desenha o "❔" ao lado do título e, se aberto, o painel de ajuda."""
+@st.dialog("Como funciona", width="large")
+def _painel(titulo, conn):
+    """O conteúdo da ajuda, numa janela por cima da tela.
+
+    Antes isto era um quadro desenhado ali mesmo, dentro da coluna estreita do
+    cabeçalho — o texto saía espremido numa faixa de quatro palavras por linha
+    e o vídeo ficava do tamanho de um selo. A janela usa a largura toda.
+    """
     conteudo = conteudo_ajuda.para(titulo)
-    if not conteudo:
+    st.markdown(conteudo["texto"])
+
+    url = _url_video(conn, conteudo_ajuda.chave_video(titulo), conteudo.get("video"))
+    if url:
+        st.video(url)
+
+    # Cada assunto tem vídeo próprio: é o que liga o vídeo à dica, e não à
+    # tela inteira. O balão nativo (help=) não aceitaria vídeo nenhum.
+    assuntos = conteudo_ajuda.topicos(titulo)
+    if assuntos:
+        st.divider()
+        rotulos = [a["titulo"] for a in assuntos]
+        escolhido = st.radio("Assunto", rotulos, key=f"assunto_{titulo}", horizontal=True)
+        assunto = next(a for a in assuntos if a["titulo"] == escolhido)
+        st.markdown(assunto["texto"])
+        url_assunto = _url_video(
+            conn, conteudo_ajuda.chave_video(titulo, escolhido), assunto.get("video"))
+        if url_assunto:
+            st.video(url_assunto)
+
+    st.divider()
+    if st.button("Fechar", key=f"fechar_ajuda_{titulo}", use_container_width=True):
+        st.rerun()  # dentro de janela, é isto que fecha
+
+
+def botao(titulo, conn=None):
+    """Desenha o "❔ Como funciona" ao lado do título da tela."""
+    if not conteudo_ajuda.para(titulo):
         return False
 
-    chave = f"ajuda_aberta_{titulo}"
-    if st.button("❔ Como funciona", key=f"btn_{chave}", help="Explicação desta tela"):
-        st.session_state[chave] = not st.session_state.get(chave, False)
-        st.rerun()
-
-    if not st.session_state.get(chave):
-        return False
-
-    with st.container(border=True):
-        st.markdown(conteudo["texto"])
-        url = _url_video(conn, conteudo_ajuda.chave_video(titulo), conteudo.get("video"))
-        if url:
-            st.video(url)
-
-        # Cada assunto tem vídeo próprio: é o que liga o vídeo à dica, e não à
-        # tela inteira. O balão nativo (help=) não aceitaria vídeo nenhum.
-        assuntos = conteudo_ajuda.topicos(titulo)
-        if assuntos:
-            st.markdown("---")
-            rotulos = [a["titulo"] for a in assuntos]
-            escolhido = st.radio("Assunto", rotulos, key=f"assunto_{titulo}")
-            assunto = next(a for a in assuntos if a["titulo"] == escolhido)
-            st.markdown(assunto["texto"])
-            url_assunto = _url_video(
-                conn, conteudo_ajuda.chave_video(titulo, escolhido), assunto.get("video"))
-            if url_assunto:
-                st.video(url_assunto)
-
-        if st.button("Fechar", key=f"fechar_{chave}"):
-            st.session_state[chave] = False
-            st.rerun()
+    # Sem estado guardado de propósito: a janela é um fragmento do Streamlit,
+    # então ela se mantém aberta sozinha e o "X" fecha de verdade. Com um
+    # sinalizador em session_state, fechar pelo "X" reabriria no rerun seguinte.
+    # Ícone do Material em vez do emoji "❔": o emoji sai pálido e fininho na
+    # fonte do tema, e era o que deixava o botão com cara de defeito.
+    if st.button("Como funciona", icon=":material/help:", key=f"btn_ajuda_{titulo}",
+                 help="Explicação desta tela", use_container_width=True):
+        _painel(titulo, conn)
     return True
 
 

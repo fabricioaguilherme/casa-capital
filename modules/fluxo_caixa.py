@@ -73,27 +73,32 @@ def _previsto_realizado(conn, grupo_id, contas):
     indo. O que já aconteceu vem de `pago`; o que ainda vai, de `pendente`."""
     hoje = date.today()
 
-    c1, c2, c3 = st.columns([1.2, 1.2, 2], vertical_alignment="bottom")
+    # Tudo numa faixa só. Os filtros são meio de chegar ao gráfico, não o
+    # assunto da tela: cada linha que eles ocupam empurra a análise para baixo
+    # da dobra. Por isso seleção em vez de botão de rádio (rádio com três
+    # opções quebra em duas linhas na coluna estreita) e botão de alternância
+    # em vez de multiseleção (as etiquetas da multiseleção empilham).
+    c1, c2, c3, c4, c5 = st.columns([1.1, 1.1, 1.7, 1.2, 1.2], vertical_alignment="bottom")
     with c1:
         inicio = st.date_input("De", value=hoje - relativedelta(months=5), key="fc_pr_ini")
     with c2:
         fim = st.date_input("Até", value=hoje + relativedelta(months=3), key="fc_pr_fim")
     with c3:
         conta_id = _filtro_conta(conn, contas, chave="fc_pr_conta")
-
-    c4, c5, c6, c7 = st.columns([1.3, 1.3, 1.8, 1.8], vertical_alignment="bottom")
     with c4:
         # Mensal enxerga a tendência; diário serve para investigar um mês que
         # destoou. Por isso mensal é o padrão.
-        periodo = st.radio("Agrupar por", list(AGRUPAMENTOS), horizontal=True,
-                           key="fc_pr_periodo")
+        periodo = st.selectbox("Agrupar por", list(AGRUPAMENTOS), key="fc_pr_periodo")
     with c5:
-        modo = st.radio("Gráfico", ["Unificado", "Separado"], horizontal=True, key="fc_pr_modo")
+        modo = st.selectbox("Gráfico", ["Unificado", "Separado"], key="fc_pr_modo")
+
+    c6, c7 = st.columns([1.6, 1.2], vertical_alignment="bottom")
     with c6:
-        series = st.multiselect("Mostrar no gráfico", SERIES, default=SERIES, key="fc_pr_series")
+        series = st.segmented_control("Mostrar no gráfico", SERIES, default=SERIES,
+                                      selection_mode="multi", key="fc_pr_series") or []
     with c7:
-        detalhes = st.multiselect("Detalhar", DETALHES, default=["Por categoria"],
-                                  key="fc_pr_detalhes")
+        detalhes = st.segmented_control("Detalhar", DETALHES, default=["Por categoria"],
+                                        selection_mode="multi", key="fc_pr_detalhes") or []
 
     if inicio > fim:
         st.error("A data inicial está depois da final.")
@@ -298,15 +303,14 @@ def _saldo_atual(conn, grupo_id):
 # ── Projeção ─────────────────────────────────────────────────────────────
 
 def _projecao(conn, grupo_id, contas):
-    c1, c2, c3 = st.columns([1.4, 1.4, 2])
+    c1, c2, c3 = st.columns([1.6, 1.2, 1.6], vertical_alignment="bottom")
     with c1:
         dias = st.select_slider(
             "Horizonte", options=[30, 60, 90, 180, 365], value=90,
             format_func=lambda d: f"{d} dias", key="fc_proj_dias",
         )
     with c2:
-        rotulo = st.radio("Agrupar por", list(GRANULARIDADES), horizontal=True,
-                          key="fc_proj_gran")
+        rotulo = st.selectbox("Agrupar por", list(GRANULARIDADES), key="fc_proj_gran")
     with c3:
         conta_id = _filtro_conta(conn, contas, chave="fc_proj_conta")
 
