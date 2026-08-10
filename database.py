@@ -1,7 +1,7 @@
 import os
 import secrets
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from dateutil.relativedelta import relativedelta
 
 import conexao
@@ -9,13 +9,13 @@ import conexao
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "financeiro.db")
 
 FORMAS_PAGAMENTO = [
-    "Pix", "Cartão de crédito", "Cartão de débito", "Transferência / TED",
-    "Boleto", "Débito automático", "Dinheiro", "Cheque", "Outro",
+    "Pix", "CartÃ£o de crÃ©dito", "CartÃ£o de dÃ©bito", "TransferÃªncia / TED",
+    "Boleto", "DÃ©bito automÃ¡tico", "Dinheiro", "Cheque", "Outro",
 ]
 
 
 def get_connection():
-    """Conexão com o banco — SQLite local ou Turso, decidido por conexao.py."""
+    """ConexÃ£o com o banco â SQLite local ou Turso, decidido por conexao.py."""
     return conexao.conectar()
 
 
@@ -72,7 +72,7 @@ def init_db(conn):
         nome TEXT NOT NULL,
         tipo TEXT NOT NULL CHECK (tipo IN ('receita', 'despesa')),
         categoria_pai_id INTEGER REFERENCES categorias(id),
-        icone TEXT DEFAULT '💰'
+        icone TEXT DEFAULT 'ð°'
     );
 
     CREATE TABLE IF NOT EXISTS lancamentos (
@@ -117,9 +117,9 @@ def init_db(conn):
         grupo_id INTEGER REFERENCES grupos(id)
     );
 
-    -- Anexos: só a FICHA do arquivo. O binário fica no disco (ver storage.py),
-    -- para o backup do banco não inchar e a migração p/ nuvem ser indolor.
-    -- entidade/entidade_id é polimórfico: serve para lançamento, conta, patrimônio…
+    -- Anexos: sÃ³ a FICHA do arquivo. O binÃ¡rio fica no disco (ver storage.py),
+    -- para o backup do banco nÃ£o inchar e a migraÃ§Ã£o p/ nuvem ser indolor.
+    -- entidade/entidade_id Ã© polimÃ³rfico: serve para lanÃ§amento, conta, patrimÃ´nioâ¦
     CREATE TABLE IF NOT EXISTS anexos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         entidade TEXT NOT NULL,
@@ -151,7 +151,7 @@ def init_db(conn):
 
 
 def _migrar_schema(conn):
-    """Acrescenta colunas/índices novos em bancos criados antes deles existirem."""
+    """Acrescenta colunas/Ã­ndices novos em bancos criados antes deles existirem."""
     colunas = [c["name"] for c in conn.execute("PRAGMA table_info(lancamentos)").fetchall()]
     if "forma_pagamento" not in colunas:
         conn.execute("ALTER TABLE lancamentos ADD COLUMN forma_pagamento TEXT")
@@ -160,42 +160,13 @@ def _migrar_schema(conn):
     if "email" not in cols_usuarios:
         conn.execute("ALTER TABLE usuarios ADD COLUMN email TEXT")
 
-    # Multi-tenancy: adiciona grupo_id às tabelas de dados
+    # Multi-tenancy: adiciona grupo_id Ã s tabelas de dados
     _add_column_if_missing(conn, "contas", "grupo_id", "INTEGER REFERENCES grupos(id)")
     _add_column_if_missing(conn, "lancamentos", "grupo_id", "INTEGER REFERENCES grupos(id)")
     _add_column_if_missing(conn, "patrimonio_itens", "grupo_id", "INTEGER REFERENCES grupos(id)")
     _add_column_if_missing(conn, "investimentos", "grupo_id", "INTEGER REFERENCES grupos(id)")
     _add_column_if_missing(conn, "metas", "grupo_id", "INTEGER REFERENCES grupos(id)")
     _add_column_if_missing(conn, "anexos", "grupo_id", "INTEGER REFERENCES grupos(id)")
-
-    # Categorias e formas de pagamento aceitam grupo_id NULO de propósito:
-    # NULO é item de fábrica, que todo grupo enxerga; preenchido é criação de
-    # uma família, visível só para ela.
-    _add_column_if_missing(conn, "categorias", "grupo_id", "INTEGER REFERENCES grupos(id)")
-
-    # Identificador da transação no extrato do banco (FITID do OFX). É ele que
-    # deixa subir o mesmo extrato de novo sem duplicar: o que já tem fitid
-    # gravado é reconhecido e ignorado.
-    _add_column_if_missing(conn, "lancamentos", "fitid", "TEXT")
-
-    conn.executescript("""
-    CREATE TABLE IF NOT EXISTS formas_pagamento (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        grupo_id INTEGER REFERENCES grupos(id)
-    );
-
-    -- Link do vídeo de ajuda de cada tela. Fica no banco, e não no código,
-    -- para o dono colar um vídeo novo sem precisar publicar versão. Sem
-    -- grupo_id de propósito: a ajuda é do sistema, igual para todas as
-    -- famílias — por isso só o super admin edita.
-    CREATE TABLE IF NOT EXISTS ajuda_videos (
-        tela TEXT PRIMARY KEY,
-        url TEXT NOT NULL,
-        atualizado_em TEXT DEFAULT (datetime('now'))
-    );
-    """)
-    _seed_formas_pagamento(conn)
 
     conn.executescript("""
     CREATE INDEX IF NOT EXISTS idx_lanc_data ON lancamentos(data);
@@ -210,7 +181,7 @@ def _migrar_schema(conn):
 
 
 def _add_column_if_missing(conn, tabela, coluna, definicao):
-    """ALTER TABLE seguro — sem erro se a coluna já existir."""
+    """ALTER TABLE seguro â sem erro se a coluna jÃ¡ existir."""
     cols = [c["name"] for c in conn.execute(f"PRAGMA table_info({tabela})").fetchall()]
     if coluna not in cols:
         conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao}")
@@ -222,13 +193,13 @@ def _seed_categorias(conn):
     if existentes > 0:
         return
     padrao = [
-        ("Salário", "receita", "💼"), ("Pró-labore", "receita", "💼"),
-        ("Distribuição de Lucros", "receita", "📈"), ("Outras Receitas", "receita", "💰"),
-        ("Moradia", "despesa", "🏠"), ("Alimentação", "despesa", "🍽️"),
-        ("Transporte", "despesa", "🚗"), ("Saúde", "despesa", "💊"),
-        ("Educação", "despesa", "📚"), ("Lazer", "despesa", "🎉"),
-        ("Assinaturas", "despesa", "📺"), ("Cartão de Crédito", "despesa", "💳"),
-        ("Impostos", "despesa", "🧾"), ("Outras Despesas", "despesa", "📦"),
+        ("SalÃ¡rio", "receita", "ð¼"), ("PrÃ³-labore", "receita", "ð¼"),
+        ("DistribuiÃ§Ã£o de Lucros", "receita", "ð"), ("Outras Receitas", "receita", "ð°"),
+        ("Moradia", "despesa", "ð "), ("AlimentaÃ§Ã£o", "despesa", "ð½ï¸"),
+        ("Transporte", "despesa", "ð"), ("SaÃºde", "despesa", "ð"),
+        ("EducaÃ§Ã£o", "despesa", "ð"), ("Lazer", "despesa", "ð"),
+        ("Assinaturas", "despesa", "ðº"), ("CartÃ£o de CrÃ©dito", "despesa", "ð³"),
+        ("Impostos", "despesa", "ð§¾"), ("Outras Despesas", "despesa", "ð¦"),
     ]
     conn.executemany(
         "INSERT INTO categorias (nome, tipo, icone) VALUES (?, ?, ?)", padrao
@@ -236,21 +207,7 @@ def _seed_categorias(conn):
     conn.commit()
 
 
-def _seed_formas_pagamento(conn):
-    """Popula a lista de fábrica uma única vez (grupo_id nulo = vale para todos)."""
-    existentes = conn.execute(
-        "SELECT COUNT(*) as total FROM formas_pagamento WHERE grupo_id IS NULL"
-    ).fetchone()["total"]
-    if existentes > 0:
-        return
-    conn.executemany(
-        "INSERT INTO formas_pagamento (nome, grupo_id) VALUES (?, NULL)",
-        [(f,) for f in FORMAS_PAGAMENTO],
-    )
-    conn.commit()
-
-
-# ── Grupos (multi-tenancy) ────────────────────────────────────────────────
+# ââ Grupos (multi-tenancy) ââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def listar_grupos(conn):
     return conn.execute("SELECT * FROM grupos ORDER BY criado_em").fetchall()
@@ -287,7 +244,7 @@ def listar_membros_grupo(conn, grupo_id):
 
 
 def adicionar_membro_grupo(conn, grupo_id, email, papel="membro"):
-    """Insere membro; ignora se o e-mail já pertencer ao grupo."""
+    """Insere membro; ignora se o e-mail jÃ¡ pertencer ao grupo."""
     existente = conn.execute(
         "SELECT id FROM usuarios_grupo WHERE grupo_id = ? AND lower(user_email) = lower(?)",
         (grupo_id, email),
@@ -310,7 +267,7 @@ def remover_membro_grupo(conn, grupo_id, email):
     conn.commit()
 
 
-# ── Usuários ─────────────────────────────────────────────────────────────
+# ââ UsuÃ¡rios âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def listar_usuarios(conn):
     return conn.execute("SELECT * FROM usuarios ORDER BY nome").fetchall()
@@ -335,7 +292,7 @@ def buscar_usuario_por_email(conn, email):
 
 
 def criar_usuario_google(conn, nome, email):
-    """Usuário que entra pelo Google não tem senha própria."""
+    """UsuÃ¡rio que entra pelo Google nÃ£o tem senha prÃ³pria."""
     cur = conn.execute(
         "INSERT INTO usuarios (nome, login, email, senha_hash, salt) VALUES (?, ?, ?, '', '')",
         (nome, email.lower(), email.lower()),
@@ -345,7 +302,7 @@ def criar_usuario_google(conn, nome, email):
 
 
 def vincular_email(conn, usuario_id, email):
-    """Liga um e-mail Google a um usuário que já existia com login e senha."""
+    """Liga um e-mail Google a um usuÃ¡rio que jÃ¡ existia com login e senha."""
     conn.execute("UPDATE usuarios SET email = lower(?) WHERE id = ?", (email, usuario_id))
     conn.commit()
 
@@ -358,7 +315,7 @@ def atualizar_senha(conn, usuario_id, senha_hash, salt):
     conn.commit()
 
 
-# ── Sessões persistentes (mantém login após recarregar a página) ─────────
+# ââ SessÃµes persistentes (mantÃ©m login apÃ³s recarregar a pÃ¡gina) âââââââââ
 
 def criar_sessao(conn, usuario_id, dias=30):
     from datetime import datetime, timedelta
@@ -374,7 +331,7 @@ def criar_sessao(conn, usuario_id, dias=30):
 
 
 def usuario_por_sessao(conn, token):
-    """Retorna o usuário dono do token, se a sessão existir e não tiver expirado."""
+    """Retorna o usuÃ¡rio dono do token, se a sessÃ£o existir e nÃ£o tiver expirado."""
     from datetime import datetime
 
     if not token:
@@ -406,7 +363,7 @@ def limpar_sessoes_expiradas(conn):
     conn.commit()
 
 
-# ── Contas ───────────────────────────────────────────────────────────────
+# ââ Contas âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def listar_contas(conn, apenas_ativas=True, grupo_id=None):
     params = []
@@ -433,8 +390,8 @@ def criar_conta(conn, nome, tipo, saldo_inicial, cor="#6366f1", grupo_id=None):
 
 
 def atualizar_conta(conn, conta_id, nome, tipo, saldo_inicial):
-    """Atualiza uma conta. Ao deixar de ser cartão, remove o registro de cartão órfão;
-    ao virar cartão, cria um registro de cartão com valores padrão."""
+    """Atualiza uma conta. Ao deixar de ser cartÃ£o, remove o registro de cartÃ£o Ã³rfÃ£o;
+    ao virar cartÃ£o, cria um registro de cartÃ£o com valores padrÃ£o."""
     era_cartao = conn.execute(
         "SELECT tipo FROM contas WHERE id = ?", (conta_id,)
     ).fetchone()["tipo"] == "cartao"
@@ -445,7 +402,7 @@ def atualizar_conta(conn, conta_id, nome, tipo, saldo_inicial):
     )
 
     if era_cartao and tipo != "cartao":
-        # desvincula lançamentos que apontavam para o cartão antes de removê-lo
+        # desvincula lanÃ§amentos que apontavam para o cartÃ£o antes de removÃª-lo
         cartao = conn.execute("SELECT id FROM cartoes WHERE conta_id = ?", (conta_id,)).fetchone()
         if cartao:
             conn.execute("UPDATE lancamentos SET cartao_id = NULL WHERE cartao_id = ?", (cartao["id"],))
@@ -465,11 +422,11 @@ def contar_lancamentos_conta(conn, conta_id):
 
 
 def deletar_conta(conn, conta_id, apagar_lancamentos=False):
-    """Exclui uma conta. Só remove lançamentos vinculados se explicitamente autorizado."""
+    """Exclui uma conta. SÃ³ remove lanÃ§amentos vinculados se explicitamente autorizado."""
     if apagar_lancamentos:
         conn.execute("DELETE FROM lancamentos WHERE conta_id = ?", (conta_id,))
     elif contar_lancamentos_conta(conn, conta_id) > 0:
-        raise ValueError("Conta possui lançamentos vinculados.")
+        raise ValueError("Conta possui lanÃ§amentos vinculados.")
 
     cartao = conn.execute("SELECT id FROM cartoes WHERE conta_id = ?", (conta_id,)).fetchone()
     if cartao:
@@ -516,577 +473,7 @@ def saldo_total(conn, grupo_id=None):
     return sum(c["saldo"] for c in saldos_por_conta(conn, grupo_id=grupo_id) if c["tipo"] != "cartao")
 
 
-def saldo_por_natureza(conn, grupo_id=None):
-    """Separa o dinheiro parado em Caixa, Bancos e Aplicações.
-
-    Cartão fica de fora: ele é dívida, não é onde o dinheiro está. Aplicações
-    vêm dos investimentos, que não são conta e por isso não entram no
-    `saldo_total` — daí o total daqui ser maior que o de lá.
-    """
-    contas = saldos_por_conta(conn, grupo_id=grupo_id)
-    caixa = sum(c["saldo"] for c in contas if c["tipo"] == "carteira")
-    bancos = sum(c["saldo"] for c in contas if c["tipo"] == "banco")
-    aplicacoes = sum(i["valor_atual"] for i in listar_investimentos(conn, grupo_id=grupo_id))
-    return {
-        "caixa": caixa,
-        "bancos": bancos,
-        "aplicacoes": aplicacoes,
-        "disponivel": caixa + bancos,
-        "total": caixa + bancos + aplicacoes,
-        "contas": [c for c in contas if c["tipo"] != "cartao"],
-    }
-
-
-def _filtro_previsto(grupo_id, conta_id, categoria_id):
-    """Condição comum das consultas de previsto: só pendente, dentro do grupo."""
-    cond = ["lancamentos.status = 'pendente'"]
-    params = []
-    if grupo_id is not None:
-        cond.append("lancamentos.grupo_id = ?")
-        params.append(grupo_id)
-    if conta_id:
-        cond.append("lancamentos.conta_id = ?")
-        params.append(conta_id)
-    if categoria_id:
-        cond.append("lancamentos.categoria_id = ?")
-        params.append(categoria_id)
-    return " AND ".join(cond), params
-
-
-def pendentes_em_caixa(conn, grupo_id=None, conta_id=None, categoria_id=None):
-    """Pendentes com a data em que o dinheiro sai de verdade.
-
-    Compra no cartão vira a data de vencimento da fatura. Sem isso o fluxo de
-    caixa antecipa a saída para o dia da compra, e todas as compras do ciclo
-    aparecem espalhadas em vez de uma fatura só.
-    """
-    onde, params = _filtro_previsto(grupo_id, conta_id, categoria_id)
-    linhas = conn.execute(
-        f"""SELECT id, data, valor, tipo, cartao_id, descricao, conta_id, categoria_id
-            FROM lancamentos WHERE {onde}""",
-        tuple(params),
-    ).fetchall()
-    cartoes = _mapa_cartoes(conn, grupo_id)
-    for linha in linhas:
-        linha["data_caixa"] = data_de_caixa(linha, cartoes)
-    return linhas
-
-
-# ── Vídeos de ajuda ──────────────────────────────────────────────────────
-
-def videos_ajuda(conn):
-    """{tela: url} de todos os vídeos cadastrados."""
-    return {l["tela"]: l["url"]
-            for l in conn.execute("SELECT tela, url FROM ajuda_videos").fetchall()}
-
-
-def video_ajuda(conn, tela):
-    linha = conn.execute("SELECT url FROM ajuda_videos WHERE tela = ?", (tela,)).fetchone()
-    return linha["url"] if linha else ""
-
-
-def salvar_video_ajuda(conn, tela, url):
-    """Grava ou apaga o vídeo de uma tela. URL vazia remove o registro."""
-    url = (url or "").strip()
-    if not url:
-        conn.execute("DELETE FROM ajuda_videos WHERE tela = ?", (tela,))
-    else:
-        conn.execute(
-            """INSERT INTO ajuda_videos (tela, url, atualizado_em)
-               VALUES (?, ?, datetime('now'))
-               ON CONFLICT(tela) DO UPDATE SET url = excluded.url,
-                                               atualizado_em = datetime('now')""",
-            (tela, url),
-        )
-    conn.commit()
-
-
-# ── Importação de extrato e conciliação ──────────────────────────────────
-
-# Quanto o valor e a data podem divergir para o sistema propor que duas linhas
-# são a mesma coisa. Data folgada porque a conta é paga uns dias antes ou
-# depois do que foi cadastrado; valor apertado porque R$ 400 e R$ 450 são
-# despesas diferentes, não a mesma com arredondamento.
-TOLERANCIA_DIAS = 5
-TOLERANCIA_VALOR = 0.02
-
-
-def fitids_ja_importados(conn, fitids, grupo_id=None):
-    """Quais desses identificadores já entraram — evita duplicar reimportando."""
-    fitids = [f for f in fitids if f]
-    if not fitids:
-        return set()
-    marcadores = ",".join("?" for _ in fitids)
-    filtro = " AND grupo_id = ?" if grupo_id is not None else ""
-    params = list(fitids) + ([grupo_id] if grupo_id is not None else [])
-    linhas = conn.execute(
-        f"SELECT fitid FROM lancamentos WHERE fitid IN ({marcadores}){filtro}",
-        tuple(params),
-    ).fetchall()
-    return {l["fitid"] for l in linhas}
-
-
-def candidatos_conciliacao(conn, transacao, grupo_id=None, conta_id=None, cartao_id=None):
-    """Lançamentos pendentes que podem ser esta linha do extrato.
-
-    Casa por valor quase exato e data próxima. Devolve ordenado pela distância
-    de data, para o mais provável ficar em primeiro.
-
-    Com `cartao_id`, procura entre as compras daquele cartão — é o que evita
-    duplicar quando a pessoa lançou a compra na mão e depois sobe a fatura.
-    Sem ele, procura só entre lançamentos que NÃO são de cartão.
-    """
-    inicio = (transacao["data"] - timedelta(days=TOLERANCIA_DIAS)).isoformat()
-    fim = (transacao["data"] + timedelta(days=TOLERANCIA_DIAS)).isoformat()
-
-    cond = ["lancamentos.status = 'pendente'", "lancamentos.tipo = ?",
-            "ABS(lancamentos.valor - ?) <= ?", "lancamentos.data BETWEEN ? AND ?"]
-    params = [transacao["tipo"], transacao["valor"], TOLERANCIA_VALOR, inicio, fim]
-    if grupo_id is not None:
-        cond.append("lancamentos.grupo_id = ?")
-        params.append(grupo_id)
-    if cartao_id:
-        cond.append("lancamentos.cartao_id = ?")
-        params.append(cartao_id)
-    else:
-        cond.append("lancamentos.cartao_id IS NULL")
-        if conta_id:
-            cond.append("lancamentos.conta_id = ?")
-            params.append(conta_id)
-
-    linhas = conn.execute(
-        f"""SELECT lancamentos.*, categorias.nome AS nome_categoria,
-                   categorias.icone AS icone_categoria
-            FROM lancamentos
-            JOIN categorias ON categorias.id = lancamentos.categoria_id
-            WHERE {' AND '.join(cond)}""",
-        tuple(params),
-    ).fetchall()
-
-    for linha in linhas:
-        linha["distancia"] = abs((date.fromisoformat(linha["data"]) - transacao["data"]).days)
-    return sorted(linhas, key=lambda l: l["distancia"])
-
-
-def faturas_para_conciliar(conn, transacao, grupo_id=None, tolerancia=0.02):
-    """Faturas em aberto cujo total bate com esta linha do extrato.
-
-    O pagamento da fatura aparece no extrato como um valor só. Criar um
-    lançamento novo com ele duplicaria as compras já registradas — o certo é
-    dar as compras daquela fatura por pagas.
-    """
-    if transacao["tipo"] != "saida":
-        return []
-    cartoes = _mapa_cartoes(conn, grupo_id)
-    if not cartoes:
-        return []
-    nomes = {c["id"]: c["nome_conta"] for c in listar_cartoes(conn, grupo_id=grupo_id)}
-
-    agrupado = {}
-    for linha in pendentes_em_caixa(conn, grupo_id, None, None):
-        if not linha["cartao_id"]:
-            continue
-        chave = (linha["cartao_id"], linha["data_caixa"])
-        total, ids = agrupado.get(chave, (0.0, []))
-        agrupado[chave] = (total + linha["valor"], ids + [linha["id"]])
-
-    achados = []
-    for (cartao_id, vencimento), (total, ids) in agrupado.items():
-        if abs(total - transacao["valor"]) > tolerancia:
-            continue
-        if abs((vencimento - transacao["data"]).days) > TOLERANCIA_DIAS:
-            continue
-        achados.append({
-            "cartao": nomes.get(cartao_id, "Cartão"),
-            "vencimento": vencimento,
-            "total": total,
-            "lancamento_ids": ids,
-        })
-    return sorted(achados, key=lambda f: abs((f["vencimento"] - transacao["data"]).days))
-
-
-def conciliar_lancamento(conn, lancamento_id, fitid, data_extrato=None):
-    """Marca como pago e guarda o identificador do extrato.
-
-    A data também é atualizada: a conta foi paga quando o banco diz, não
-    quando foi cadastrada, e é essa data que o fluxo de caixa precisa.
-    """
-    if data_extrato:
-        conn.execute(
-            "UPDATE lancamentos SET status = 'pago', fitid = ?, data = ? WHERE id = ?",
-            (fitid, data_extrato, lancamento_id),
-        )
-    else:
-        conn.execute(
-            "UPDATE lancamentos SET status = 'pago', fitid = ? WHERE id = ?",
-            (fitid, lancamento_id),
-        )
-    conn.commit()
-
-
-def conciliar_fatura(conn, lancamento_ids, fitid):
-    """Dá por pagas todas as compras de uma fatura.
-
-    O fitid vai só na primeira: ele identifica a linha do extrato, e a linha é
-    uma só. Repetir em todas faria o extrato parecer já importado por inteiro
-    quando só o pagamento da fatura entrou.
-    """
-    if not lancamento_ids:
-        return
-    marcadores = ",".join("?" for _ in lancamento_ids)
-    conn.execute(
-        f"UPDATE lancamentos SET status = 'pago' WHERE id IN ({marcadores})",
-        tuple(lancamento_ids),
-    )
-    conn.execute("UPDATE lancamentos SET fitid = ? WHERE id = ?",
-                 (fitid, lancamento_ids[0]))
-    conn.commit()
-
-
-def criar_do_extrato(conn, transacao, conta_id, categoria_id, usuario_id,
-                     grupo_id=None, cartao_id=None):
-    """Lançamento novo a partir de uma linha do extrato.
-
-    Vindo do extrato da conta, nasce **pago**: o dinheiro já saiu. Vindo da
-    fatura do cartão, nasce **pendente**, porque a compra ainda vai ser paga
-    no vencimento — é o que faz o ciclo de fatura continuar valendo e o
-    pagamento no extrato do banco poder baixá-la depois.
-    """
-    status = "pendente" if cartao_id else "pago"
-    cur = conn.execute(
-        """INSERT INTO lancamentos
-             (data, conta_id, categoria_id, descricao, valor, tipo, status,
-              usuario_id, grupo_id, fitid, cartao_id, forma_pagamento)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (transacao["data"].isoformat(), conta_id, categoria_id,
-         transacao["descricao"][:200], transacao["valor"], transacao["tipo"],
-         status, usuario_id, grupo_id, transacao["fitid"], cartao_id,
-         "Cartão de crédito" if cartao_id else None),
-    )
-    conn.commit()
-    return cur.lastrowid
-
-
-def faturas_previstas(conn, dias, grupo_id=None, conta_id=None):
-    """As faturas em aberto até hoje + `dias`, uma linha por cartão/vencimento.
-
-    É a tradução do que o usuário vê no aplicativo do banco: não dezoito
-    compras soltas, e sim 'Nubank, vence dia 05, R$ 3.000'.
-    """
-    limite = date.today() + timedelta(days=dias)
-    cartoes = _mapa_cartoes(conn, grupo_id)
-    if not cartoes:
-        return []
-    nomes = {c["id"]: c["nome_conta"] for c in listar_cartoes(conn, grupo_id=grupo_id)}
-
-    agrupado = {}
-    for linha in pendentes_em_caixa(conn, grupo_id, conta_id, None):
-        if not linha["cartao_id"] or linha["data_caixa"] > limite:
-            continue
-        chave = (linha["cartao_id"], linha["data_caixa"])
-        total, quantidade = agrupado.get(chave, (0.0, 0))
-        agrupado[chave] = (total + linha["valor"], quantidade + 1)
-
-    return sorted(
-        ({"cartao": nomes.get(cid, "Cartão"), "vencimento": venc,
-          "total": total, "quantidade": qtd}
-         for (cid, venc), (total, qtd) in agrupado.items()),
-        key=lambda f: f["vencimento"],
-    )
-
-
-def previsto_ate(conn, dias, grupo_id=None, conta_id=None, categoria_id=None):
-    """(entradas, saidas) pendentes de hoje até hoje + `dias`, pela data em que
-    o dinheiro sai.
-
-    O passado pendente entra de propósito: conta vencida e não paga continua
-    sendo dinheiro que vai sair, e some da previsão se filtrar só o futuro.
-    """
-    limite = date.today() + timedelta(days=dias)
-    entradas = saidas = 0.0
-    for linha in pendentes_em_caixa(conn, grupo_id, conta_id, categoria_id):
-        if linha["data_caixa"] > limite:
-            continue
-        if linha["tipo"] == "entrada":
-            entradas += linha["valor"]
-        else:
-            saidas += linha["valor"]
-    return entradas, saidas
-
-
-def previsto_por_categoria(conn, dias, tipo, grupo_id=None, conta_id=None):
-    """Quebra o previsto por categoria — é o que responde 'sai tanto, com o quê'."""
-    limite = (date.today() + timedelta(days=dias)).isoformat()
-    onde, params = _filtro_previsto(grupo_id, conta_id, None)
-    return conn.execute(
-        f"""SELECT categorias.nome, categorias.icone,
-                   COALESCE(SUM(lancamentos.valor), 0) AS total,
-                   COUNT(*) AS quantidade
-            FROM lancamentos
-            JOIN categorias ON categorias.id = lancamentos.categoria_id
-            WHERE {onde} AND lancamentos.tipo = ? AND lancamentos.data <= ?
-            GROUP BY categorias.id ORDER BY total DESC""",
-        tuple(params + [tipo, limite]),
-    ).fetchall()
-
-
-def _dia_valido(ano, mes, dia):
-    """Encaixa o dia no mês: fechamento 31 em fevereiro vira 28 (ou 29)."""
-    if mes > 12:
-        ano, mes = ano + 1, mes - 12
-    ultimo = (date(ano + (mes == 12), (mes % 12) + 1, 1) - timedelta(days=1)).day
-    return date(ano, mes, min(dia, ultimo))
-
-
-def ciclo_fatura(data_compra, dia_fechamento, dia_vencimento):
-    """(fechamento, vencimento) da fatura em que a compra cai.
-
-    Compra ANTES do fechamento entra na fatura que fecha neste mês; no dia do
-    fechamento ou depois, já é a do mês seguinte — é assim que o cartão
-    funciona, e errar isso joga a despesa um mês inteiro fora do lugar.
-
-    O vencimento costuma cair no mês seguinte ao fechamento (fecha 25, vence
-    05). Quando o dia do vencimento é maior que o do fechamento, os dois caem
-    no mesmo mês (fecha 05, vence 15).
-    """
-    if isinstance(data_compra, str):
-        data_compra = date.fromisoformat(data_compra)
-
-    fechamento = _dia_valido(data_compra.year, data_compra.month, dia_fechamento)
-    if data_compra >= fechamento:
-        fechamento = _dia_valido(data_compra.year, data_compra.month + 1, dia_fechamento)
-
-    mes_venc = fechamento.month + (0 if dia_vencimento > dia_fechamento else 1)
-    vencimento = _dia_valido(fechamento.year, mes_venc, dia_vencimento)
-    return fechamento, vencimento
-
-
-def _mapa_cartoes(conn, grupo_id=None):
-    """{cartao_id: (dia_fechamento, dia_vencimento)} para converter data de
-    compra em data de pagamento sem ir ao banco a cada linha."""
-    return {
-        c["id"]: (c["dia_fechamento"], c["dia_vencimento"])
-        for c in listar_cartoes(conn, grupo_id=grupo_id)
-    }
-
-
-def data_de_caixa(lancamento, cartoes):
-    """Quando o dinheiro realmente sai da conta.
-
-    Para compra no cartão é o vencimento da fatura, não o dia da compra: a
-    despesa nasce na compra (competência), mas o dinheiro só sai quando a
-    fatura é paga. Usar a data da compra no fluxo de caixa antecipa a saída e
-    engana a projeção.
-    """
-    cartao_id = lancamento.get("cartao_id")
-    if not cartao_id or cartao_id not in cartoes:
-        return date.fromisoformat(lancamento["data"])
-    fechamento, vencimento = cartoes[cartao_id]
-    return ciclo_fatura(lancamento["data"], fechamento, vencimento)[1]
-
-
-def previsto_por_categoria_periodo(conn, inicio, fim, tipo, grupo_id=None, conta_id=None):
-    """Igual a `previsto_por_categoria`, mas entre duas datas em vez de N dias.
-
-    Existe porque a tela Previsto × Realizado tem período livre e precisa
-    comparar as duas metades com o mesmo recorte.
-    """
-    onde, params = _filtro_previsto(grupo_id, conta_id, None)
-    return conn.execute(
-        f"""SELECT categorias.nome, categorias.icone,
-                   COALESCE(SUM(lancamentos.valor), 0) AS total,
-                   COUNT(*) AS quantidade
-            FROM lancamentos
-            JOIN categorias ON categorias.id = lancamentos.categoria_id
-            WHERE {onde} AND lancamentos.tipo = ?
-              AND lancamentos.data BETWEEN ? AND ?
-            GROUP BY categorias.id ORDER BY total DESC""",
-        tuple(params + [tipo, inicio, fim]),
-    ).fetchall()
-
-
-def projecao_saldo(conn, dias, grupo_id=None, conta_id=None, categoria_id=None):
-    """Saldo dia a dia daqui até `dias` à frente.
-
-    Parte do saldo de hoje (só o que está pago) e vai somando os pendentes na
-    data de cada um. Devolve [(data, saldo, entradas_do_dia, saidas_do_dia)].
-    """
-    hoje = date.today()
-    saldo = saldo_total(conn, grupo_id=grupo_id)
-    limite = hoje + timedelta(days=dias)
-
-    # Pendente com data passada pesa no primeiro dia: já era para ter saído.
-    por_dia = {}
-    for linha in pendentes_em_caixa(conn, grupo_id, conta_id, categoria_id):
-        if linha["data_caixa"] > limite:
-            continue
-        dia = max(linha["data_caixa"], hoje)
-        entradas, saidas = por_dia.get(dia, (0.0, 0.0))
-        if linha["tipo"] == "entrada":
-            por_dia[dia] = (entradas + linha["valor"], saidas)
-        else:
-            por_dia[dia] = (entradas, saidas + linha["valor"])
-
-    pontos = []
-    for passo in range(dias + 1):
-        dia = hoje + timedelta(days=passo)
-        entradas, saidas = por_dia.get(dia, (0.0, 0.0))
-        saldo += entradas - saidas
-        pontos.append((dia, saldo, entradas, saidas))
-    return pontos
-
-
-def _filtro_realizado(grupo_id, conta_id, categoria_id):
-    """Só o que foi efetivamente pago/recebido — o previsto tem visão própria."""
-    cond = ["lancamentos.status = 'pago'"]
-    params = []
-    if grupo_id is not None:
-        cond.append("lancamentos.grupo_id = ?")
-        params.append(grupo_id)
-    if conta_id:
-        cond.append("lancamentos.conta_id = ?")
-        params.append(conta_id)
-    if categoria_id:
-        cond.append("lancamentos.categoria_id = ?")
-        params.append(categoria_id)
-    return " AND ".join(cond), params
-
-
-def realizado_resumo(conn, inicio, fim, grupo_id=None, conta_id=None, categoria_id=None):
-    """(entradas, saidas) que de fato aconteceram no período."""
-    onde, params = _filtro_realizado(grupo_id, conta_id, categoria_id)
-    linha = conn.execute(
-        f"""SELECT
-              COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0) AS entradas,
-              COALESCE(SUM(CASE WHEN tipo = 'saida'   THEN valor ELSE 0 END), 0) AS saidas
-            FROM lancamentos WHERE {onde} AND data BETWEEN ? AND ?""",
-        tuple(params + [inicio, fim]),
-    ).fetchone()
-    return linha["entradas"], linha["saidas"]
-
-
-def realizado_por_mes(conn, inicio, fim, grupo_id=None, conta_id=None, categoria_id=None):
-    """Mês a mês: quanto entrou, quanto saiu, quanto sobrou."""
-    onde, params = _filtro_realizado(grupo_id, conta_id, categoria_id)
-    linhas = conn.execute(
-        f"""SELECT substr(data, 1, 7) AS mes,
-              COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0) AS entradas,
-              COALESCE(SUM(CASE WHEN tipo = 'saida'   THEN valor ELSE 0 END), 0) AS saidas
-            FROM lancamentos WHERE {onde} AND data BETWEEN ? AND ?
-            GROUP BY mes ORDER BY mes""",
-        tuple(params + [inicio, fim]),
-    ).fetchall()
-    for linha in linhas:
-        linha["resultado"] = linha["entradas"] - linha["saidas"]
-    return linhas
-
-
-# Como agrupar a série no SQL. A semana começa na segunda: recua o número de
-# dias desde ela ((%w + 6) % 7 transforma domingo=0 em domingo=6).
-_AGRUPAMENTO = {
-    "diario": "data",
-    "semanal": "date(data, '-' || ((CAST(strftime('%w', data) AS INTEGER) + 6) % 7) || ' days')",
-    "mensal": "substr(data, 1, 7)",
-}
-
-
-def serie_periodo(conn, inicio, fim, granularidade="mensal",
-                  grupo_id=None, conta_id=None, categoria_id=None):
-    """Série no tempo separando o que já aconteceu do que ainda está marcado.
-
-    Uma consulta só, com as quatro colunas, para dar o gráfico contínuo: o
-    passado vem de `pago`, o futuro de `pendente`, e o período corrente costuma
-    ter os dois. Somar tudo numa coluna esconderia justamente essa diferença.
-
-    `granularidade` aceita diario, semanal ou mensal — mensal enxerga a
-    tendência, diário serve para investigar um mês que destoou.
-    """
-    coluna = _AGRUPAMENTO.get(granularidade, _AGRUPAMENTO["mensal"])
-    cond = []
-    params = []
-    if grupo_id is not None:
-        cond.append("grupo_id = ?")
-        params.append(grupo_id)
-    if conta_id:
-        cond.append("conta_id = ?")
-        params.append(conta_id)
-    if categoria_id:
-        cond.append("categoria_id = ?")
-        params.append(categoria_id)
-    onde = (" AND " + " AND ".join(cond)) if cond else ""
-
-    linhas = conn.execute(
-        f"""SELECT {coluna} AS periodo,
-              COALESCE(SUM(CASE WHEN status='pago' AND tipo='entrada' THEN valor ELSE 0 END), 0) AS entradas_reais,
-              COALESCE(SUM(CASE WHEN status='pago' AND tipo='saida'   THEN valor ELSE 0 END), 0) AS saidas_reais,
-              COALESCE(SUM(CASE WHEN status='pendente' AND tipo='entrada' THEN valor ELSE 0 END), 0) AS entradas_previstas,
-              COALESCE(SUM(CASE WHEN status='pendente' AND tipo='saida'   THEN valor ELSE 0 END), 0) AS saidas_previstas
-            FROM lancamentos WHERE data BETWEEN ? AND ?{onde}
-            GROUP BY periodo ORDER BY periodo""",
-        tuple([inicio, fim] + params),
-    ).fetchall()
-
-    for linha in linhas:
-        linha["rotulo"] = _rotulo_periodo(linha["periodo"], granularidade)
-        linha["resultado_real"] = linha["entradas_reais"] - linha["saidas_reais"]
-        linha["resultado_previsto"] = linha["entradas_previstas"] - linha["saidas_previstas"]
-        linha["entradas_total"] = linha["entradas_reais"] + linha["entradas_previstas"]
-        linha["saidas_total"] = linha["saidas_reais"] + linha["saidas_previstas"]
-        linha["resultado_total"] = linha["entradas_total"] - linha["saidas_total"]
-    return linhas
-
-
-def _rotulo_periodo(valor, granularidade):
-    """Rótulo curto para o eixo do gráfico: 05/08 · 05/08 (semana) · ago/26."""
-    if granularidade == "mensal":
-        ano, mes = valor.split("-")
-        nomes = ["jan", "fev", "mar", "abr", "mai", "jun",
-                 "jul", "ago", "set", "out", "nov", "dez"]
-        return f"{nomes[int(mes) - 1]}/{ano[2:]}"
-    dia = date.fromisoformat(valor)
-    return dia.strftime("%d/%m")
-
-
-def serie_mensal(conn, inicio, fim, grupo_id=None, conta_id=None, categoria_id=None):
-    """Atalho para a série mensal — o padrão da tela."""
-    return serie_periodo(conn, inicio, fim, "mensal", grupo_id=grupo_id,
-                         conta_id=conta_id, categoria_id=categoria_id)
-
-
-def realizado_por_categoria(conn, inicio, fim, tipo, grupo_id=None, conta_id=None):
-    onde, params = _filtro_realizado(grupo_id, conta_id, None)
-    return conn.execute(
-        f"""SELECT categorias.nome, categorias.icone,
-                   COALESCE(SUM(lancamentos.valor), 0) AS total,
-                   COUNT(*) AS quantidade
-            FROM lancamentos
-            JOIN categorias ON categorias.id = lancamentos.categoria_id
-            WHERE {onde} AND lancamentos.tipo = ? AND lancamentos.data BETWEEN ? AND ?
-            GROUP BY categorias.id ORDER BY total DESC""",
-        tuple(params + [tipo, inicio, fim]),
-    ).fetchall()
-
-
-def agrupar_projecao(pontos, granularidade):
-    """Reduz a projeção diária para semanas ou meses, guardando o saldo do
-    último dia de cada balde — que é o que interessa: como termino o período."""
-    if granularidade == "diario":
-        return pontos
-
-    baldes = {}
-    for dia, saldo, entradas, saidas in pontos:
-        if granularidade == "semanal":
-            chave = dia - timedelta(days=dia.weekday())  # segunda-feira
-        else:
-            chave = dia.replace(day=1)
-        anterior = baldes.get(chave)
-        acumulado_e = (anterior[2] if anterior else 0) + entradas
-        acumulado_s = (anterior[3] if anterior else 0) + saidas
-        baldes[chave] = (chave, saldo, acumulado_e, acumulado_s)
-    return [baldes[c] for c in sorted(baldes)]
-
-
-# ── Cartões ──────────────────────────────────────────────────────────────
+# ââ CartÃµes ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def listar_cartoes(conn, grupo_id=None):
     if grupo_id is not None:
@@ -1112,58 +499,6 @@ def criar_cartao(conn, nome, dia_fechamento, dia_vencimento, limite, grupo_id=No
     return cur.lastrowid
 
 
-def atualizar_cartao(conn, cartao_id, nome, dia_fechamento, dia_vencimento, limite, grupo_id):
-    """O cartão vive em duas tabelas: o nome em `contas`, o resto em `cartoes`.
-
-    O grupo entra na condição para ninguém editar cartão de outra família por
-    id adivinhado.
-    """
-    linha = conn.execute(
-        """SELECT cartoes.id, cartoes.conta_id FROM cartoes
-           JOIN contas ON contas.id = cartoes.conta_id
-           WHERE cartoes.id = ? AND contas.grupo_id = ?""",
-        (cartao_id, grupo_id),
-    ).fetchone()
-    if not linha:
-        return False
-    conn.execute("UPDATE contas SET nome = ? WHERE id = ?", (nome, linha["conta_id"]))
-    conn.execute(
-        "UPDATE cartoes SET dia_fechamento = ?, dia_vencimento = ?, limite = ? WHERE id = ?",
-        (dia_fechamento, dia_vencimento, limite, cartao_id),
-    )
-    conn.commit()
-    return True
-
-
-def contar_lancamentos_cartao(conn, cartao_id):
-    return conn.execute(
-        "SELECT COUNT(*) as total FROM lancamentos WHERE cartao_id = ?", (cartao_id,)
-    ).fetchone()["total"]
-
-
-def deletar_cartao(conn, cartao_id, grupo_id, apagar_lancamentos=False):
-    """(apagou, motivo). Apaga a ficha do cartão e a conta que o representa.
-
-    Sem `apagar_lancamentos`, recusa quando há compras lançadas — some com o
-    cartão levaria junto o histórico de fatura sem o usuário perceber.
-    """
-    linha = conn.execute(
-        """SELECT cartoes.id, cartoes.conta_id FROM cartoes
-           JOIN contas ON contas.id = cartoes.conta_id
-           WHERE cartoes.id = ? AND contas.grupo_id = ?""",
-        (cartao_id, grupo_id),
-    ).fetchone()
-    if not linha:
-        return False, "Cartão não encontrado neste grupo."
-
-    compras = contar_lancamentos_cartao(conn, cartao_id)
-    if compras and not apagar_lancamentos:
-        return False, f"{compras} compra(s) lançada(s) neste cartão."
-
-    deletar_conta(conn, linha["conta_id"], apagar_lancamentos=True)
-    return True, ""
-
-
 def fatura_cartao(conn, cartao_id, mes, ano):
     inicio = date(ano, mes, 1)
     fim = inicio + relativedelta(months=1)
@@ -1174,116 +509,33 @@ def fatura_cartao(conn, cartao_id, mes, ano):
     ).fetchall()
 
 
-# ── Categorias ───────────────────────────────────────────────────────────
+# ââ Categorias âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
-def listar_categorias(conn, tipo=None, grupo_id=None):
-    """As de fábrica (grupo_id nulo) mais as criadas pelo próprio grupo."""
-    q = "SELECT * FROM categorias WHERE (grupo_id IS NULL OR grupo_id = ?)"
-    params = [grupo_id]
+def listar_categorias(conn, tipo=None):
     if tipo:
-        q += " AND tipo = ?"
-        params.append(tipo)
-    q += " ORDER BY tipo, nome"
-    return conn.execute(q, tuple(params)).fetchall()
+        return conn.execute(
+            "SELECT * FROM categorias WHERE tipo = ? ORDER BY nome", (tipo,)
+        ).fetchall()
+    return conn.execute("SELECT * FROM categorias ORDER BY tipo, nome").fetchall()
 
 
-def criar_categoria(conn, nome, tipo, icone="💰", grupo_id=None):
+def criar_categoria(conn, nome, tipo, icone="ð°"):
     cur = conn.execute(
-        "INSERT INTO categorias (nome, tipo, icone, grupo_id) VALUES (?, ?, ?, ?)",
-        (nome, tipo, icone, grupo_id),
+        "INSERT INTO categorias (nome, tipo, icone) VALUES (?, ?, ?)", (nome, tipo, icone)
     )
     conn.commit()
     return cur.lastrowid
 
 
-def atualizar_categoria(conn, categoria_id, nome, icone, grupo_id):
-    """Só mexe no que pertence ao grupo — item de fábrica ninguém renomeia."""
-    conn.execute(
-        "UPDATE categorias SET nome = ?, icone = ? WHERE id = ? AND grupo_id = ?",
-        (nome, icone, categoria_id, grupo_id),
-    )
-    conn.commit()
-
-
-def contar_lancamentos_categoria(conn, categoria_id):
-    return conn.execute(
-        "SELECT COUNT(*) as total FROM lancamentos WHERE categoria_id = ?", (categoria_id,)
-    ).fetchone()["total"]
-
-
-def deletar_categoria(conn, categoria_id, grupo_id):
-    """(apagou, motivo). Recusa se estiver em uso ou se for item de fábrica.
-
-    Apagar uma categoria usada deixaria lançamentos apontando para o vazio, e o
-    análise por categoria pararia de somar aquele gasto sem avisar ninguém.
-    """
-    em_uso = contar_lancamentos_categoria(conn, categoria_id)
-    if em_uso:
-        return False, f"{em_uso} lançamento(s) usam esta categoria."
-    dona = conn.execute(
-        "SELECT grupo_id FROM categorias WHERE id = ?", (categoria_id,)
-    ).fetchone()
-    if not dona or dona["grupo_id"] != grupo_id:
-        return False, "Categoria de fábrica não pode ser excluída."
-    conn.execute("DELETE FROM categorias WHERE id = ?", (categoria_id,))
-    conn.commit()
-    return True, ""
-
-
-# ── Formas de pagamento ──────────────────────────────────────────────────
-
-def listar_formas_pagamento(conn, grupo_id=None):
-    linhas = conn.execute(
-        "SELECT * FROM formas_pagamento WHERE (grupo_id IS NULL OR grupo_id = ?) "
-        "ORDER BY grupo_id IS NOT NULL, nome",
-        (grupo_id,),
-    ).fetchall()
-    return linhas
-
-
-def nomes_formas_pagamento(conn, grupo_id=None):
-    """Só os nomes, para alimentar os selectbox de lançamento."""
-    return [f["nome"] for f in listar_formas_pagamento(conn, grupo_id=grupo_id)]
-
-
-def criar_forma_pagamento(conn, nome, grupo_id):
-    cur = conn.execute(
-        "INSERT INTO formas_pagamento (nome, grupo_id) VALUES (?, ?)", (nome, grupo_id)
-    )
-    conn.commit()
-    return cur.lastrowid
-
-
-def atualizar_forma_pagamento(conn, forma_id, nome, grupo_id):
-    """Só renomeia o que é do grupo — item de fábrica fica como está."""
-    conn.execute(
-        "UPDATE formas_pagamento SET nome = ? WHERE id = ? AND grupo_id = ?",
-        (nome, forma_id, grupo_id),
-    )
-    conn.commit()
-
-
-def deletar_forma_pagamento(conn, forma_id, grupo_id):
-    """(apagou, motivo). Item de fábrica fica; o do grupo sai."""
-    dona = conn.execute(
-        "SELECT grupo_id FROM formas_pagamento WHERE id = ?", (forma_id,)
-    ).fetchone()
-    if not dona or dona["grupo_id"] != grupo_id:
-        return False, "Forma de pagamento de fábrica não pode ser excluída."
-    conn.execute("DELETE FROM formas_pagamento WHERE id = ?", (forma_id,))
-    conn.commit()
-    return True, ""
-
-
-# ── Lançamentos ──────────────────────────────────────────────────────────
+# ââ LanÃ§amentos ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def criar_lancamento(
     conn, data_lanc, conta_id, categoria_id, descricao, valor, tipo, status,
     usuario_id, cartao_id=None, parcelas=1, recorrente=False, repeticoes=1,
     forma_pagamento=None, grupo_id=None,
 ):
-    """Cria um lançamento simples, parcelado (cartão) ou recorrente (mensal).
-    Parcelamento e recorrência são mutuamente exclusivos por lançamento."""
+    """Cria um lanÃ§amento simples, parcelado (cartÃ£o) ou recorrente (mensal).
+    Parcelamento e recorrÃªncia sÃ£o mutuamente exclusivos por lanÃ§amento."""
     d = date.fromisoformat(data_lanc)
 
     if parcelas > 1:
@@ -1391,12 +643,12 @@ def deletar_lancamento(conn, lancamento_id, apenas_futuras=False):
         alvos = [lancamento_id]
         conn.execute("DELETE FROM lancamentos WHERE id = ?", (lancamento_id,))
     conn.commit()
-    # anexos ficariam órfãos (o vínculo é polimórfico, sem FK) — limpa junto
+    # anexos ficariam Ã³rfÃ£os (o vÃ­nculo Ã© polimÃ³rfico, sem FK) â limpa junto
     for alvo in alvos:
         excluir_anexos_da_entidade(conn, "lancamento", alvo)
 
 
-# ── Patrimônio ───────────────────────────────────────────────────────────
+# ââ PatrimÃ´nio âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def listar_patrimonio(conn, grupo_id=None):
     if grupo_id is not None:
@@ -1430,7 +682,7 @@ def deletar_patrimonio_item(conn, item_id):
 
 
 def patrimonio_liquido(conn, saldo_contas=None, investido=None, grupo_id=None):
-    """Aceita valores pré-calculados para evitar repetir consultas na mesma tela."""
+    """Aceita valores prÃ©-calculados para evitar repetir consultas na mesma tela."""
     itens = listar_patrimonio(conn, grupo_id=grupo_id)
     ativos = sum(i["valor_atual"] for i in itens if i["tipo"] == "ativo")
     passivos = sum(i["valor_atual"] for i in itens if i["tipo"] == "passivo")
@@ -1441,7 +693,7 @@ def patrimonio_liquido(conn, saldo_contas=None, investido=None, grupo_id=None):
     return ativos + investido - passivos + saldo_contas
 
 
-# ── Investimentos ────────────────────────────────────────────────────────
+# ââ Investimentos ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def listar_investimentos(conn, grupo_id=None):
     if grupo_id is not None:
@@ -1471,7 +723,7 @@ def deletar_investimento(conn, inv_id):
     conn.commit()
 
 
-# ── Metas ────────────────────────────────────────────────────────────────
+# ââ Metas ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 def listar_metas(conn, grupo_id=None):
     if grupo_id is not None:
@@ -1500,9 +752,9 @@ def deletar_meta(conn, meta_id):
     conn.commit()
 
 
-# ── Anexos ───────────────────────────────────────────────────────────────
-# O binário fica no disco (storage.py); aqui guardamos só a ficha.
-# Isso mantém o backup do banco leve e permite migrar para nuvem sem tocar
+# ââ Anexos âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# O binÃ¡rio fica no disco (storage.py); aqui guardamos sÃ³ a ficha.
+# Isso mantÃ©m o backup do banco leve e permite migrar para nuvem sem tocar
 # no restante do aplicativo.
 
 def criar_anexo(conn, entidade, entidade_id, nome_original, chave, backend,
@@ -1566,13 +818,13 @@ def excluir_anexo(conn, anexo_id):
     try:
         storage.obter(anexo["backend"]).excluir(anexo["chave"])
     except Exception:
-        pass  # arquivo já sumiu do disco — segue e limpa a ficha
+        pass  # arquivo jÃ¡ sumiu do disco â segue e limpa a ficha
     conn.execute("DELETE FROM anexos WHERE id = ?", (anexo_id,))
     conn.commit()
     return True
 
 
 def excluir_anexos_da_entidade(conn, entidade, entidade_id):
-    """Remove todos os anexos de um registro (usado quando ele é excluído)."""
+    """Remove todos os anexos de um registro (usado quando ele Ã© excluÃ­do)."""
     for anexo in listar_anexos(conn, entidade, entidade_id):
         excluir_anexo(conn, anexo["id"])
