@@ -56,6 +56,13 @@ body, p, span, label, div {{ color: var(--text); }}
   margin-left: 0 !important;
   margin-right: auto !important;
 }}
+/* Tela de login não tem lateral — a regra acima prende o conteúdo à
+   esquerda do mesmo jeito, deixando a caixa de login fora do centro.
+   :has() escolhe só o bloco que contém a logo do login. */
+[data-testid="stMainBlockContainer"]:has(.login-topo) {{
+  margin-left: auto !important;
+  margin-right: auto !important;
+}}
 
 h1, h2, h3 {{ letter-spacing: -0.02em; }}
 
