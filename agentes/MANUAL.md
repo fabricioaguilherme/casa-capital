@@ -277,12 +277,17 @@ doze relatórios plausíveis e errados, e não tem como conferir nenhum.
 
 Regra de bolso: **agente que você não consegue conferir não deveria existir ainda.**
 
+O passo zero disso tudo é `agentes/LEVANTAMENTO.md`: sem as respostas de lá, o
+agente sai com método genérico — e método genérico é exatamente o que não
+resolve o problema da sua empresa.
+
 ---
 
 ## 10. Arquivos
 
 | Arquivo | O que é |
 |---|---|
+| `agentes/LEVANTAMENTO.md` | As perguntas que você responde para os agentes serem escritos com o seu método, e não com teoria genérica |
 | `.claude/agents/diretor.md` | O gestor — prioriza, cobra, escala |
 | `.claude/agents/especialista-financeiro.md` | Especialista com acesso ao banco |
 | `.claude/agents/contraditor.md` | Tenta derrubar a conclusão |
