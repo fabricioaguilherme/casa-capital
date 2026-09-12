@@ -1,0 +1,23 @@
+name: consultoria
+version: 1.0.0
+description: >-
+  Resumos de reuniões de consultoria: lê a transcrição no Google Drive, gera e
+  revisa os resumos com GPT, preenche os templates no Google Docs, atualiza a
+  planilha de cadastro e envia o PDF ao cliente por e-mail.
+author: Casa Capital
+provides_tools:
+  - gerar_resumo
+  - ajustar_resumo
+  - aprovar_e_enviar
+  - status_consultoria
+provides_hooks:
+  - post_tool_call
+python_dependencies:
+  - google-api-python-client>=2.100.0
+  - google-auth>=2.23.0
+  - openai>=1.30.0
+  - PyYAML>=6.0
+tags:
+  - consultoria
+  - google-drive
+  - resumo
