@@ -1,0 +1,77 @@
+# Modelo do arquivo de configuração do plugin de consultoria.
+#
+# Copie para ~/.hermes/plugins/consultoria/config.local.yaml e preencha.
+# Esse arquivo guarda segredos (senha de app, chave da OpenAI) e NÃO vai para o git.
+# Qualquer campo também pode vir de variável de ambiente — a variável tem prioridade.
+
+google:
+  # Caminho do JSON da Service Account na VPS (GOOGLE_SERVICE_ACCOUNT_FILE).
+  # Compartilhe como Editor: pasta de transcrições, pasta raiz de clientes,
+  # planilha de cadastro e os dois Google Docs de template.
+  service_account_file: /root/.hermes/plugins/consultoria/service-account.json
+
+drive:
+  # Pasta onde as transcrições caem (Tactiq, CraftNote, upload manual).
+  pasta_transcricoes_id: "COLE_AQUI_O_ID_DA_PASTA"
+  # Opcional: raiz das pastas de clientes. Só é usada quando o cadastro do
+  # cliente estiver sem a coluna "Pasta Drive" preenchida.
+  pasta_raiz_clientes_id: ""
+
+planilha:
+  id: "COLE_AQUI_O_ID_DA_PLANILHA"
+  # Opcional: nome da aba. Vazio = primeira aba da planilha.
+  aba: ""
+  # Só preencha se os títulos das colunas forem diferentes destes.
+  colunas:
+    nome: Nome
+    pasta_drive: Pasta Drive
+    email: Email
+    tipo: Tipo
+    resumo_gerado: Resumo Gerado
+    email_enviado: Email Enviado
+
+templates:
+  # Documento do cliente (fluxo "Consultoria" e também gerado no fluxo "Sebrae").
+  detalhado:
+    doc_id: "COLE_AQUI_O_ID_DO_GOOGLE_DOC"
+    nome_arquivo: "{cliente} - Resumo da Consultoria - {data}"
+    # As áreas NÃO precisam ser listadas aqui: o plugin lê os marcadores
+    # {{AREA}} direto do Google Doc. Use este bloco só para dar ao GPT uma
+    # instrução extra sobre o que entra em cada área.
+    areas:
+      DIAGNOSTICO: "situação atual do negócio, com os números e fatos ditos na reunião"
+      ORIENTACOES: "as orientações dadas pelo consultor, uma por item"
+      PROXIMOS_PASSOS: "o que ficou combinado, com responsável e prazo quando houver"
+    instrucoes: ""
+  # Documento curto do Sebrae (gerado só quando a palavra-chave é "Sebrae").
+  curto:
+    doc_id: ""
+    nome_arquivo: "{cliente} - Resumo Sebrae - {data}"
+    areas: {}
+    instrucoes: ""
+
+consultor:
+  # Como você aparece nas transcrições que separam falantes (Tactiq, por ex.).
+  # Vazio = o GPT infere pelo conteúdo quem é consultor e quem é cliente.
+  nome: ""
+
+openai:
+  api_key: "sk-..."        # ou a variável de ambiente OPENAI_API_KEY
+  model: gpt-4o
+  model_revisor: ""        # vazio = usa o mesmo modelo da geração
+
+email:
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  remetente: "voce@gmail.com"
+  senha_app: "senha de app de 16 letras"
+  nome: "Seu Nome - Consultoria"
+  assunto: "Resumo da nossa consultoria - {cliente}"
+  corpo: |
+    Olá!
+
+    Segue em anexo o resumo da nossa reunião de consultoria.
+
+    Qualquer dúvida, é só me chamar.
+
+    Abraço.
