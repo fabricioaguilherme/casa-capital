@@ -1,0 +1,637 @@
+<title>Rumo ao Inglês</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  :root{
+    --paper:#EDF0F3;
+    --card:#FFFFFF;
+    --card-2:#F6F8FA;
+    --ink:#16212B;
+    --ink-soft:#546672;
+    --ink-faint:#7C8B96;
+    --line:#D7DEE4;
+    --line-strong:#B9C5CE;
+    --indigo:#2E4EA8;
+    --teal:#0C6F68;
+    --amber:#9C5E06;
+    --done:#1C7A4D;
+    --accent:var(--indigo);
+    --accent-wash:rgba(46,78,168,.09);
+    --shadow:0 1px 2px rgba(22,33,43,.06), 0 8px 24px -16px rgba(22,33,43,.22);
+    --radius:14px;
+  }
+  :root:not([data-theme="light"]){
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme:dark;
+      --paper:#0E161C;
+      --card:#16212B;
+      --card-2:#1B2833;
+      --ink:#E7EDF2;
+      --ink-soft:#9DAFBB;
+      --ink-faint:#7A8B98;
+      --line:#283743;
+      --line-strong:#3A4C59;
+      --indigo:#8CA6F2;
+      --teal:#42C3B3;
+      --amber:#E1A75C;
+      --done:#4FC58C;
+      --accent-wash:rgba(140,166,242,.14);
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 28px -18px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --paper:#0E161C;
+    --card:#16212B;
+    --card-2:#1B2833;
+    --ink:#E7EDF2;
+    --ink-soft:#9DAFBB;
+    --ink-faint:#7A8B98;
+    --line:#283743;
+    --line-strong:#3A4C59;
+    --indigo:#8CA6F2;
+    --teal:#42C3B3;
+    --amber:#E1A75C;
+    --done:#4FC58C;
+    --accent-wash:rgba(140,166,242,.14);
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 28px -18px rgba(0,0,0,.7);
+  }
+  body[data-profile="esposa"]{ --accent:var(--teal); --accent-wash:rgba(12,111,104,.10); }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) body[data-profile="esposa"]{ --accent-wash:rgba(66,195,179,.14); }
+  }
+  :root[data-theme="dark"] body[data-profile="esposa"]{ --accent-wash:rgba(66,195,179,.14); }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"IBM Plex Sans", system-ui, -apple-system, Segoe UI, sans-serif;
+    font-size:16px;
+    line-height:1.55;
+    padding-inline:20px;
+    padding-block:0 56px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:860px;margin-inline:auto}
+  @media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
+
+  /* ---------- header ---------- */
+  header.top{padding-block:40px 26px;border-bottom:1px solid var(--line)}
+  .eyebrow{
+    font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 10px
+  }
+  h1{
+    font-family:"Instrument Serif", Georgia, serif;
+    font-weight:400;font-size:clamp(38px,9vw,58px);line-height:1.02;
+    margin:0;letter-spacing:-.01em;text-wrap:balance;
+  }
+  h1 em{font-style:italic;color:var(--accent)}
+  .lede{margin:14px 0 0;max-width:56ch;color:var(--ink-soft);font-size:16.5px}
+
+  /* ---------- profile switch ---------- */
+  .profiles{display:flex;gap:10px;flex-wrap:wrap;margin-block:26px 0}
+  .profile{
+    flex:1 1 200px;min-width:0;text-align:left;cursor:pointer;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:13px 15px;color:var(--ink);font:inherit;
+    display:flex;align-items:center;gap:12px;transition:border-color .15s, box-shadow .15s;
+  }
+  .profile:hover{border-color:var(--line-strong)}
+  .profile[aria-pressed="true"]{border-color:var(--dot);box-shadow:var(--shadow)}
+  .profile .dot{width:11px;height:11px;border-radius:50%;background:var(--dot);flex:none}
+  .profile b{display:block;font-weight:600;font-size:15px}
+  .profile span{display:block;font-size:12.5px;color:var(--ink-faint)}
+  .profile .pct{margin-left:auto;font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink-soft)}
+  #p-voce{--dot:var(--indigo)}
+  #p-esposa{--dot:var(--teal)}
+
+  /* ---------- trail ---------- */
+  .trail-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-block:34px 12px}
+  .section-label{font-size:11.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-faint);margin:0}
+  .trail-count{font-size:13px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+  .trail{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;overflow-x:auto;padding-bottom:4px}
+  .day{
+    cursor:pointer;font:inherit;color:var(--ink-soft);background:var(--card);
+    border:1px solid var(--line);border-radius:11px;padding:10px 4px 9px;
+    display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .day:hover{border-color:var(--line-strong)}
+  .day .n{font-family:"Source Serif 4",Georgia,serif;font-size:19px;line-height:1;font-variant-numeric:tabular-nums}
+  .day .tick{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+  .day[aria-current="true"]{background:var(--accent);border-color:var(--accent);color:var(--card)}
+  .day[aria-current="true"] .tick{color:inherit;opacity:.8}
+  .day[data-done="true"] .n{color:var(--done)}
+  .day[data-done="true"][aria-current="true"] .n{color:inherit}
+
+  /* ---------- lesson ---------- */
+  .lesson{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-top:14px;overflow:hidden}
+  .lesson-head{padding:22px 22px 18px;border-bottom:1px solid var(--line)}
+  .lesson-head .kicker{font-size:11.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+  h2{font-family:"Instrument Serif",Georgia,serif;font-weight:400;font-size:clamp(26px,5.5vw,34px);line-height:1.1;margin:0;letter-spacing:-.01em;text-wrap:balance}
+  .lesson-head p{margin:8px 0 0;color:var(--ink-soft);font-size:14.5px;max-width:60ch}
+  .meter{display:flex;align-items:center;gap:10px;margin-top:16px}
+  .meter .bar{flex:1;height:5px;border-radius:99px;background:var(--card-2);border:1px solid var(--line);overflow:hidden}
+  .meter .fill{display:block;height:100%;background:var(--accent);width:0;transition:width .25s ease}
+  .meter .txt{font-size:12.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  ol.phrases{list-style:none;margin:0;padding:0}
+  ol.phrases li{border-bottom:1px solid var(--line)}
+  ol.phrases li:last-child{border-bottom:0}
+  .phrase{display:flex;gap:14px;align-items:flex-start;padding:14px 22px;cursor:pointer}
+  .phrase:hover{background:var(--card-2)}
+  .phrase input{
+    appearance:none;-webkit-appearance:none;margin:3px 0 0;flex:none;
+    width:19px;height:19px;border:1.5px solid var(--line-strong);border-radius:6px;background:var(--card);
+    cursor:pointer;position:relative;
+  }
+  .phrase input:checked{background:var(--done);border-color:var(--done)}
+  .phrase input:checked::after{
+    content:"";position:absolute;left:5px;top:2px;width:6px;height:10px;
+    border:2px solid var(--card);border-top:0;border-left:0;transform:rotate(42deg)
+  }
+  .phrase input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .phrase .body{min-width:0;flex:1}
+  .en{font-family:"Source Serif 4",Georgia,serif;font-size:18px;font-weight:600;line-height:1.3;display:block}
+  .pt{display:block;font-size:14.5px;color:var(--ink-soft);margin-top:2px}
+  .pron{display:block;font-size:13px;color:var(--amber);font-style:italic;letter-spacing:.01em;margin-top:3px}
+  .phrase input:checked ~ .body .en{color:var(--ink-soft)}
+
+  .lesson-foot{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:18px 22px;background:var(--card-2);border-top:1px solid var(--line)}
+  .btn{
+    font:inherit;font-weight:600;font-size:14.5px;cursor:pointer;
+    border:1px solid var(--accent);background:var(--accent);color:var(--card);
+    border-radius:10px;padding:10px 16px;transition:opacity .15s
+  }
+  .btn:hover{opacity:.88}
+  .btn.ghost{background:transparent;color:var(--accent)}
+  .btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .foot-note{font-size:13px;color:var(--ink-faint)}
+
+  /* ---------- speak callout ---------- */
+  .speak{
+    display:flex;gap:14px;align-items:flex-start;margin-top:14px;padding:16px 18px;
+    background:var(--accent-wash);border:1px solid var(--accent);border-radius:var(--radius)
+  }
+  .speak svg{flex:none;margin-top:2px}
+  .speak h3{margin:0 0 4px;font-size:15px;font-weight:600}
+  .speak p{margin:0;font-size:14px;color:var(--ink-soft);max-width:58ch}
+
+  /* ---------- routine ---------- */
+  .routine{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:14px}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px}
+  .step .min{font-family:"Source Serif 4",Georgia,serif;font-size:26px;line-height:1;font-variant-numeric:tabular-nums}
+  .step .min small{font-family:"IBM Plex Sans",sans-serif;font-size:12px;font-weight:500;color:var(--ink-faint);margin-left:3px}
+  .step b{display:block;margin-top:8px;font-size:14.5px;font-weight:600}
+  .step p{margin:4px 0 0;font-size:13.5px;color:var(--ink-soft)}
+
+  /* ---------- ear training ---------- */
+  .ear{margin-top:14px;display:grid;gap:10px}
+  .watch{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+  .watch .tag, .avoid .tag{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+  .watch b, .avoid b{display:block;margin-top:5px;font-size:15.5px;font-weight:600}
+  .watch p{margin:5px 0 0;font-size:14px;color:var(--ink-soft)}
+  .search{
+    display:inline-block;margin-top:9px;font-size:13px;color:var(--ink);
+    background:var(--card-2);border:1px dashed var(--line-strong);border-radius:8px;padding:5px 9px
+  }
+  .avoid .tag{color:var(--ink-faint)}
+  .avoid{background:transparent;border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+  .avoid p{margin:5px 0 0;font-size:14px;color:var(--ink-soft)}
+
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-faint)}
+  footer p{margin:0 0 6px}
+
+  @media (max-width:560px){
+    .trail{grid-template-columns:repeat(7,minmax(42px,1fr))}
+    .phrase,.lesson-head,.lesson-foot{padding-inline:16px}
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Semana 1 &middot; Inglês de sobrevivência</p>
+    <h1>Rumo ao <em>Inglês</em></h1>
+    <p class="lede">Sete dias de frases que você realmente vai usar morando fora. Trinta minutos por dia: ouvir, falar em voz alta, repetir no dia seguinte. Nada de decorar regra de gramática.</p>
+
+    <div class="profiles" role="group" aria-label="Escolha o perfil">
+      <button class="profile" id="p-voce" type="button" aria-pressed="true" data-profile="voce">
+        <span class="dot" aria-hidden="true"></span>
+        <span><b>Você</b><span>Entende um pouco, quer destravar a fala</span></span>
+        <span class="pct" data-pct="voce">0%</span>
+      </button>
+      <button class="profile" id="p-esposa" type="button" aria-pressed="false" data-profile="esposa">
+        <span class="dot" aria-hidden="true"></span>
+        <span><b>Esposa</b><span>Começando do zero, bem devagar</span></span>
+        <span class="pct" data-pct="esposa">0%</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="trail-head">
+    <p class="section-label">Trilha da semana</p>
+    <span class="trail-count" id="trail-count">0 de 7 dias concluídos</span>
+  </div>
+  <div class="trail" id="trail" role="tablist" aria-label="Dias da semana 1"></div>
+
+  <section class="lesson" id="lesson" aria-live="polite">
+    <div class="lesson-head">
+      <p class="kicker" id="l-kicker">Dia 1</p>
+      <h2 id="l-title">—</h2>
+      <p id="l-goal"></p>
+      <div class="meter">
+        <span class="bar"><span class="fill" id="l-fill"></span></span>
+        <span class="txt" id="l-count">0 de 0 frases</span>
+      </div>
+    </div>
+    <ol class="phrases" id="l-phrases"></ol>
+    <div class="lesson-foot">
+      <button class="btn" type="button" id="finish">Concluir o dia</button>
+      <span class="foot-note" id="finish-note"></span>
+    </div>
+  </section>
+
+  <div class="speak">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+      <path d="M12 3v18M7 7v10M17 7v10M2.5 10.5v3M21.5 10.5v3"/>
+    </svg>
+    <div>
+      <h3>Agora fale em voz alta</h3>
+      <p>Depois de ler as frases do dia, abra o <strong>modo de voz</strong> do app do Claude (o ícone de onda sonora ao lado do microfone) e diga cada uma em inglês. Peça correção de pronúncia frase por frase — é a parte que faz a fluência acontecer.</p>
+    </div>
+  </div>
+
+  <div class="trail-head"><p class="section-label">Rotina de 30 minutos</p></div>
+  <div class="routine">
+    <div class="step">
+      <span class="min">10<small>min</small></span>
+      <b>Aquecer o ouvido</b>
+      <p>Um vídeo curto de inglês para iniciantes, com legenda em inglês.</p>
+    </div>
+    <div class="step">
+      <span class="min">15<small>min</small></span>
+      <b>Falar em voz alta</b>
+      <p>As frases do dia no modo de voz, com correção de pronúncia.</p>
+    </div>
+    <div class="step">
+      <span class="min">5<small>min</small></span>
+      <b>Fixar</b>
+      <p>Marcar as frases novas e revisar as de ontem antes de dormir.</p>
+    </div>
+  </div>
+
+  <div class="trail-head">
+    <p class="section-label">Treino de ouvido</p>
+    <span class="trail-count" id="ear-for"></span>
+  </div>
+  <div class="ear" id="ear"></div>
+
+  <footer>
+    <p>Seu progresso fica salvo neste navegador, em cada aparelho. Abrindo em outro aparelho, os dias marcados começam do zero — por isso vale estudar sempre no mesmo (o celular).</p>
+    <p>Cada pessoa usa a própria conta do Claude: perfis separados aqui, vozes separadas no modo de voz.</p>
+  </footer>
+</div>
+
+<script>
+const PLANO = {
+  voce: {
+    nome: "Você",
+    dias: [
+      { tema: "Se apresentar", meta: "Dizer quem você é sem travar — o primeiro contato com qualquer pessoa lá fora.", frases: [
+        ["Hi, I'm Fabrício.", "Oi, eu sou o Fabrício.", "rái, aim Fabrício"],
+        ["Nice to meet you.", "Prazer em conhecer você.", "náis tu mít iú"],
+        ["I'm from Brazil.", "Eu sou do Brasil.", "aim from bra-zíu"],
+        ["I speak a little English.", "Eu falo um pouco de inglês.", "ai spík a lítou ínglish"],
+        ["I'm learning English.", "Estou aprendendo inglês.", "aim lérning ínglish"],
+        ["What's your name?", "Qual é o seu nome?", "uáts iór neim"],
+        ["Sorry, can you repeat that?", "Desculpe, pode repetir?", "sóri, quén iú ripít dét"],
+        ["Can you speak slowly, please?", "Pode falar devagar, por favor?", "quén iú spík slôu-li, plíz"],
+        ["This is my wife.", "Esta é minha esposa.", "dis iz mai uáif"],
+        ["See you later!", "Até mais!", "sí iú lêi-ter"]
+      ]},
+      { tema: "Perguntas básicas", meta: "Cinco perguntas resolvem 80% dos apertos do dia a dia. Estas são elas.", frases: [
+        ["Excuse me...", "Com licença... (para chamar alguém)", "ex-quiúz mi"],
+        ["Where is the bathroom?", "Onde é o banheiro?", "uér iz de béth-rum"],
+        ["How much is it?", "Quanto custa?", "rau mâtch iz it"],
+        ["Can you help me?", "Você pode me ajudar?", "quén iú rélp mi"],
+        ["I don't understand.", "Eu não entendi.", "ai dônt ander-sténd"],
+        ["What does that mean?", "O que isso significa?", "uát dâz dét mín"],
+        ["Do you speak Portuguese?", "Você fala português?", "du iú spík pór-tchu-guíz"],
+        ["Is there a supermarket near here?", "Tem um supermercado perto daqui?", "iz dér a súper-marquet níar rír"],
+        ["Where can I find a pharmacy?", "Onde eu encontro uma farmácia?", "uér quén ai fáind a fár-ma-si"],
+        ["Thank you so much.", "Muito obrigado.", "ténk iú sôu mâtch"]
+      ]},
+      { tema: "Revisão + números e horas", meta: "Revise os dias 1 e 2 em voz alta e acrescente números — preço, hora, endereço, tudo passa por aqui.", frases: [
+        ["One, two, three, four, five.", "Um, dois, três, quatro, cinco.", "uân, tchú, thrí, fór, fáiv"],
+        ["Six, seven, eight, nine, ten.", "Seis, sete, oito, nove, dez.", "siks, sévan, êit, náin, ten"],
+        ["Twenty, thirty, fifty, one hundred.", "Vinte, trinta, cinquenta, cem.", "tuénti, thârti, fífti, uân rân-dred"],
+        ["What time is it?", "Que horas são?", "uát táim iz it"],
+        ["It's eight thirty.", "São oito e trinta.", "its êit thârti"],
+        ["At nine o'clock.", "Às nove horas.", "ét náin ô-clóc"],
+        ["Twenty dollars, please.", "Vinte dólares, por favor.", "tuénti dó-lars, plíz"],
+        ["It's too expensive.", "Está muito caro.", "its tchú eks-pén-siv"],
+        ["My phone number is...", "Meu telefone é...", "mai fôun nâmber iz"],
+        ["Tomorrow morning.", "Amanhã de manhã.", "tu-mó-rou mór-ning"]
+      ]},
+      { tema: "No mercado e no restaurante", meta: "Comprar comida e pedir num restaurante sem apontar para o cardápio.", frases: [
+        ["A table for two, please.", "Uma mesa para dois, por favor.", "a têi-bou fór tchú, plíz"],
+        ["Can I see the menu?", "Posso ver o menu?", "quén ai sí de mé-niu"],
+        ["I'll have the chicken, please.", "Vou querer o frango, por favor.", "áiou rév de tchí-quen, plíz"],
+        ["Water, please. Still, not sparkling.", "Água, por favor. Sem gás.", "uó-ter, plíz. stíu, nót spár-clin"],
+        ["No onions, please.", "Sem cebola, por favor.", "nôu â-nions, plíz"],
+        ["Is it spicy?", "É picante?", "iz it spái-si"],
+        ["The check, please.", "A conta, por favor.", "de tchéc, plíz"],
+        ["Can I pay by card?", "Posso pagar com cartão?", "quén ai pêi bai card"],
+        ["Do you have bread?", "Vocês têm pão?", "du iú rév bréd"],
+        ["Where are the eggs?", "Onde estão os ovos?", "uér ar di égs"]
+      ]},
+      { tema: "Revisão + transporte", meta: "Revise os dias 3 e 4 e aprenda a chegar onde você precisa chegar.", frases: [
+        ["Where is the bus stop?", "Onde é a parada de ônibus?", "uér iz de bâs stóp"],
+        ["One ticket to downtown, please.", "Uma passagem para o centro, por favor.", "uân tí-quet tchu dáun-táun, plíz"],
+        ["Does this bus go to the airport?", "Este ônibus vai para o aeroporto?", "dâz dis bâs gôu tchu di ér-port"],
+        ["How long does it take?", "Quanto tempo leva?", "rau lóng dâz it têik"],
+        ["Is it far?", "É longe?", "iz it fár"],
+        ["Can you take me to this address?", "Pode me levar até este endereço?", "quén iú têik mi tchu dis a-drés"],
+        ["Where do I change trains?", "Onde eu troco de trem?", "uér du ai tchêindj trêins"],
+        ["Is this seat taken?", "Este lugar está ocupado?", "iz dis sít têi-ken"],
+        ["Stop here, please.", "Pare aqui, por favor.", "stóp rír, plíz"],
+        ["I missed my bus.", "Perdi meu ônibus.", "ai míst mai bâs"]
+      ]},
+      { tema: "Emergências básicas", meta: "Frases que você espera nunca usar — e que precisa saber sem pensar.", frases: [
+        ["Help!", "Socorro!", "rélp"],
+        ["Call the police!", "Chame a polícia!", "cól de po-líss"],
+        ["Call an ambulance, please.", "Chame uma ambulância, por favor.", "cól an ám-biu-lans, plíz"],
+        ["I need a doctor.", "Preciso de um médico.", "ai níd a dóc-tor"],
+        ["I don't feel well.", "Não estou me sentindo bem.", "ai dônt fíu uél"],
+        ["It hurts here.", "Dói aqui.", "it rârts rír"],
+        ["I'm allergic to...", "Sou alérgico a...", "aim a-lér-djic tchu"],
+        ["My wallet was stolen.", "Roubaram minha carteira.", "mai uó-let uóz stôu-len"],
+        ["I'm lost.", "Estou perdido.", "aim lóst"],
+        ["Where is the hospital?", "Onde é o hospital?", "uér iz de rós-pi-tou"]
+      ]},
+      { tema: "Revisão geral", meta: "Nada novo hoje. Escolha 15 frases da semana, feche o hub e fale todas de memória no modo de voz.", frases: [
+        ["Hi, I'm Fabrício. Nice to meet you.", "Oi, eu sou o Fabrício. Prazer.", "rái, aim Fabrício. náis tu mít iú"],
+        ["I'm from Brazil. I'm learning English.", "Sou do Brasil. Estou aprendendo inglês.", "aim from bra-zíu. aim lérning ínglish"],
+        ["Excuse me, where is the bathroom?", "Com licença, onde é o banheiro?", "ex-quiúz mi, uér iz de béth-rum"],
+        ["How much is it?", "Quanto custa?", "rau mâtch iz it"],
+        ["Sorry, can you speak slowly?", "Desculpe, pode falar devagar?", "sóri, quén iú spík slôu-li"],
+        ["A table for two, please.", "Uma mesa para dois, por favor.", "a têi-bou fór tchú, plíz"],
+        ["The check, please. Can I pay by card?", "A conta, por favor. Posso pagar com cartão?", "de tchéc, plíz. quén ai pêi bai card"],
+        ["Does this bus go downtown?", "Este ônibus vai para o centro?", "dâz dis bâs gôu dáun-táun"],
+        ["I need a doctor. It hurts here.", "Preciso de um médico. Dói aqui.", "ai níd a dóc-tor. it rârts rír"],
+        ["Thank you so much. See you later!", "Muito obrigado. Até mais!", "ténk iú sôu mâtch. sí iú lêi-ter"]
+      ]}
+    ],
+    ouvido: [
+      { tag: "Todo dia", titulo: "Vídeos de \"English for beginners\"", texto: "Palavra ou frase curta mostrada na tela, falada devagar e repetida. É o formato que mais rende para quem entende um pouco e trava na hora de falar.", busca: "english for beginners listen and repeat" },
+      { tag: "3x por semana", titulo: "Vídeos de \"listen and repeat\"", texto: "Ouça a frase, pause, repita em voz alta imitando o ritmo. Essa técnica tem nome: shadowing. Dez minutos dela valem mais que uma hora de vídeo assistido calado.", busca: "shadowing english practice slow" },
+      { tag: "Quando cansar", titulo: "Desenho infantil simples", texto: "Frases curtíssimas, muita repetição e contexto visual — o desenho mostra o que a palavra significa. Peppa Pig e Bluey funcionam bem nesse estágio.", busca: "peppa pig full episodes english" },
+      { tag: "Regra de ouro", titulo: "Legenda sempre em inglês", texto: "Legenda em português faz o cérebro ler e ignorar o áudio. Em inglês, ela conecta o som à escrita — que é exatamente o que falta para destravar o ouvido.", busca: null },
+      { tag: "Evite por enquanto", titulo: "Séries, filmes, podcasts e música", texto: "São rápidos demais para este estágio: você entende 5%, se frustra e para. Voltamos a eles quando as frases da semana 1 saírem sem pensar.", busca: null, avoid: true }
+    ]
+  },
+  esposa: {
+    nome: "Esposa",
+    dias: [
+      { tema: "Primeiras palavras", meta: "Onze palavras. Só isso hoje. Repita cada uma cinco vezes em voz alta, sem pressa.", frases: [
+        ["Hello.", "Olá.", "ré-lou"],
+        ["Hi.", "Oi.", "rái"],
+        ["Good morning.", "Bom dia.", "gud mór-ning"],
+        ["Good afternoon.", "Boa tarde.", "gud áf-ter-nun"],
+        ["Good night.", "Boa noite (ao se despedir).", "gud náit"],
+        ["Please.", "Por favor.", "plíz"],
+        ["Thank you.", "Obrigada.", "ténk iú"],
+        ["You're welcome.", "De nada.", "iór uél-cam"],
+        ["Yes. / No.", "Sim. / Não.", "iés / nôu"],
+        ["Sorry.", "Desculpe.", "sóri"],
+        ["Bye!", "Tchau!", "bái"]
+      ]},
+      { tema: "Se apresentar", meta: "Dizer seu nome e de onde você é. Uma frase por vez, devagar.", frases: [
+        ["My name is...", "Meu nome é...", "mai nêim iz"],
+        ["I'm from Brazil.", "Eu sou do Brasil.", "aim from bra-zíu"],
+        ["Nice to meet you.", "Prazer em conhecer.", "náis tu mít iú"],
+        ["How are you?", "Como você está?", "rau ár iú"],
+        ["I'm fine, thank you.", "Estou bem, obrigada.", "aim fáin, ténk iú"],
+        ["And you?", "E você?", "énd iú"],
+        ["This is my husband.", "Este é meu marido.", "dis iz mai râz-band"],
+        ["I don't speak English.", "Eu não falo inglês.", "ai dônt spík ínglish"]
+      ]},
+      { tema: "Números", meta: "De um a dez, mais vinte e cem. Conte objetos da casa em inglês enquanto arruma.", frases: [
+        ["One, two, three.", "Um, dois, três.", "uân, tchú, thrí"],
+        ["Four, five, six.", "Quatro, cinco, seis.", "fór, fáiv, siks"],
+        ["Seven, eight, nine, ten.", "Sete, oito, nove, dez.", "sévan, êit, náin, ten"],
+        ["Twenty.", "Vinte.", "tuénti"],
+        ["One hundred.", "Cem.", "uân rân-dred"],
+        ["Two, please.", "Dois, por favor.", "tchú, plíz"],
+        ["How much?", "Quanto?", "rau mâtch"],
+        ["Number ten.", "Número dez.", "nâmber ten"]
+      ]},
+      { tema: "Palavras de casa", meta: "As coisas que você toca todo dia. Cole o nome em inglês em cada uma delas.", frases: [
+        ["Water.", "Água.", "uó-ter"],
+        ["Coffee.", "Café.", "có-fi"],
+        ["Bread.", "Pão.", "bréd"],
+        ["Milk.", "Leite.", "múlk"],
+        ["House.", "Casa.", "ráus"],
+        ["Kitchen.", "Cozinha.", "quí-tchen"],
+        ["Bathroom.", "Banheiro.", "béth-rum"],
+        ["Door. / Key.", "Porta. / Chave.", "dór / quí"],
+        ["Bed.", "Cama.", "béd"],
+        ["Phone.", "Telefone.", "fôun"]
+      ]},
+      { tema: "Pedindo ajuda", meta: "O que dizer quando você não entender nada. Estas frases salvam qualquer situação.", frases: [
+        ["Can you help me?", "Você pode me ajudar?", "quén iú rélp mi"],
+        ["I don't understand.", "Eu não entendi.", "ai dônt ander-sténd"],
+        ["Slowly, please.", "Devagar, por favor.", "slôu-li, plíz"],
+        ["Again, please.", "De novo, por favor.", "a-guén, plíz"],
+        ["Do you speak Portuguese?", "Você fala português?", "du iú spík pór-tchu-guíz"],
+        ["Where is the bathroom?", "Onde é o banheiro?", "uér iz de béth-rum"],
+        ["I need help.", "Preciso de ajuda.", "ai níd rélp"],
+        ["Thank you so much.", "Muito obrigada.", "ténk iú sôu mâtch"]
+      ]},
+      { tema: "Compras simples", meta: "Comprar pão, pagar e agradecer. Uma compra inteira com sete frases.", frases: [
+        ["How much is it?", "Quanto custa?", "rau mâtch iz it"],
+        ["This one, please.", "Este, por favor.", "dis uân, plíz"],
+        ["Two, please.", "Dois, por favor.", "tchú, plíz"],
+        ["Do you have bread?", "Vocês têm pão?", "du iú rév bréd"],
+        ["Card, please.", "Cartão, por favor.", "card, plíz"],
+        ["A bag, please.", "Uma sacola, por favor.", "a bég, plíz"],
+        ["That's all, thank you.", "É só isso, obrigada.", "déts ól, ténk iú"]
+      ]},
+      { tema: "Revisão geral", meta: "Nada novo. Escolha oito frases da semana e diga todas no modo de voz, com o Claude corrigindo.", frases: [
+        ["Hello! Good morning.", "Olá! Bom dia.", "ré-lou! gud mór-ning"],
+        ["My name is... I'm from Brazil.", "Meu nome é... Sou do Brasil.", "mai nêim iz... aim from bra-zíu"],
+        ["How are you? I'm fine, thank you.", "Como vai? Estou bem, obrigada.", "rau ár iú? aim fáin, ténk iú"],
+        ["I don't speak English. Slowly, please.", "Não falo inglês. Devagar, por favor.", "ai dônt spík ínglish. slôu-li, plíz"],
+        ["Can you help me?", "Pode me ajudar?", "quén iú rélp mi"],
+        ["Where is the bathroom?", "Onde é o banheiro?", "uér iz de béth-rum"],
+        ["How much is it? Two, please.", "Quanto custa? Dois, por favor.", "rau mâtch iz it? tchú, plíz"],
+        ["Thank you. Bye!", "Obrigada. Tchau!", "ténk iú. bái"]
+      ]}
+    ],
+    ouvido: [
+      { tag: "Todo dia", titulo: "Vídeos com palavra e imagem", texto: "A palavra aparece escrita, o objeto aparece na tela e a voz fala devagar. Nada de frase longa ainda — palavra solta, muita repetição.", busca: "english words for absolute beginners with pictures" },
+      { tag: "3x por semana", titulo: "\"Listen and repeat\" para iniciante total", texto: "Ouvir a palavra, pausar, repetir em voz alta. Errar a pronúncia faz parte: o modo de voz do Claude corrige depois.", busca: "english listen and repeat for absolute beginners" },
+      { tag: "Quando cansar", titulo: "Desenho para crianças pequenas", texto: "Peppa Pig, Bluey, Super Simple Songs. Frases curtas, entonação clara e a imagem explicando o sentido sem precisar de tradução.", busca: "super simple songs english" },
+      { tag: "Regra de ouro", titulo: "Legenda em inglês, nunca em português", texto: "No começo você não vai ler tudo — e está certo. A legenda em inglês serve para o ouvido associar o som à palavra escrita.", busca: null },
+      { tag: "Evite por enquanto", titulo: "Séries, filmes, podcasts e música", texto: "Falam rápido e sem contexto visual. Para quem está começando do zero, só geram desânimo. Fica para mais adiante.", busca: null, avoid: true }
+    ]
+  }
+};
+
+const KEY = "rumo-ao-ingles-v1";
+let estado = { voce: { frases: {}, dias: {} }, esposa: { frases: {}, dias: {} } };
+let perfil = "voce";
+let dia = 0;
+
+function carregar(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const salvo = JSON.parse(raw);
+      for(const p of ["voce","esposa"]){
+        if(salvo && salvo[p]){
+          estado[p].frases = salvo[p].frases || {};
+          estado[p].dias = salvo[p].dias || {};
+        }
+      }
+      if(salvo && salvo.perfil) perfil = salvo.perfil === "esposa" ? "esposa" : "voce";
+    }
+  }catch(e){ /* navegador sem armazenamento: segue sem salvar */ }
+}
+function salvar(){
+  try{ localStorage.setItem(KEY, JSON.stringify({ voce: estado.voce, esposa: estado.esposa, perfil })); }
+  catch(e){ /* silencioso: o hub continua funcionando na sessão */ }
+}
+
+const el = id => document.getElementById(id);
+const totalFrases = p => PLANO[p].dias.reduce((s,d) => s + d.frases.length, 0);
+const feitasPerfil = p => Object.keys(estado[p].frases).filter(k => estado[p].frases[k]).length;
+
+function renderPerfis(){
+  document.body.dataset.profile = perfil;
+  document.querySelectorAll(".profile").forEach(b => {
+    b.setAttribute("aria-pressed", String(b.dataset.profile === perfil));
+  });
+  for(const p of ["voce","esposa"]){
+    const pct = Math.round(100 * feitasPerfil(p) / totalFrases(p));
+    document.querySelector('[data-pct="'+p+'"]').textContent = pct + "%";
+  }
+}
+
+function renderTrilha(){
+  const trail = el("trail");
+  trail.textContent = "";
+  PLANO[perfil].dias.forEach((d,i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "day";
+    b.setAttribute("role","tab");
+    b.setAttribute("aria-current", String(i === dia));
+    b.dataset.done = String(!!estado[perfil].dias[i]);
+    b.setAttribute("aria-label", "Dia " + (i+1) + ": " + d.tema);
+    const n = document.createElement("span"); n.className = "n"; n.textContent = String(i+1);
+    const t = document.createElement("span"); t.className = "tick";
+    t.textContent = estado[perfil].dias[i] ? "feito" : "dia";
+    b.append(n,t);
+    b.addEventListener("click", () => { dia = i; renderTrilha(); renderLicao(); });
+    trail.append(b);
+  });
+  const feitos = PLANO[perfil].dias.filter((_,i) => estado[perfil].dias[i]).length;
+  el("trail-count").textContent = feitos + " de 7 dias concluídos";
+}
+
+function renderLicao(){
+  const d = PLANO[perfil].dias[dia];
+  el("l-kicker").textContent = "Dia " + (dia+1) + " · " + PLANO[perfil].nome;
+  el("l-title").textContent = d.tema;
+  el("l-goal").textContent = d.meta;
+
+  const ol = el("l-phrases");
+  ol.textContent = "";
+  d.frases.forEach((f,i) => {
+    const key = dia + "-" + i;
+    const li = document.createElement("li");
+    const label = document.createElement("label");
+    label.className = "phrase";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = "f-" + perfil + "-" + key;
+    cb.checked = !!estado[perfil].frases[key];
+    cb.addEventListener("change", () => {
+      estado[perfil].frases[key] = cb.checked;
+      salvar(); renderMedidor(); renderPerfis();
+    });
+    const body = document.createElement("span");
+    body.className = "body";
+    const en = document.createElement("span"); en.className = "en"; en.textContent = f[0];
+    const pt = document.createElement("span"); pt.className = "pt"; pt.textContent = f[1];
+    const pr = document.createElement("span"); pr.className = "pron"; pr.textContent = f[2];
+    body.append(en,pt,pr);
+    label.append(cb,body);
+    li.append(label);
+    ol.append(li);
+  });
+  renderMedidor();
+  renderOuvido();
+}
+
+function renderMedidor(){
+  const d = PLANO[perfil].dias[dia];
+  const feitas = d.frases.filter((_,i) => estado[perfil].frases[dia + "-" + i]).length;
+  el("l-count").textContent = feitas + " de " + d.frases.length + " frases";
+  el("l-fill").style.width = (100 * feitas / d.frases.length) + "%";
+  const concluido = !!estado[perfil].dias[dia];
+  el("finish").textContent = concluido ? "Dia concluído ✓" : "Concluir o dia";
+  el("finish").classList.toggle("ghost", concluido);
+  el("finish-note").textContent = concluido
+    ? "Amanhã comece revisando estas frases em voz alta."
+    : "Marque quando já tiver falado todas no modo de voz.";
+}
+
+function renderOuvido(){
+  el("ear-for").textContent = "Para " + (perfil === "voce" ? "você" : "a esposa");
+  const box = el("ear");
+  box.textContent = "";
+  PLANO[perfil].ouvido.forEach(o => {
+    const div = document.createElement("div");
+    div.className = o.avoid ? "avoid" : "watch";
+    const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = o.tag;
+    const b = document.createElement("b"); b.textContent = o.titulo;
+    const p = document.createElement("p"); p.textContent = o.texto;
+    div.append(tag,b,p);
+    if(o.busca){
+      const s = document.createElement("span");
+      s.className = "search";
+      s.textContent = "Busque no YouTube: " + o.busca;
+      div.append(s);
+    }
+    box.append(div);
+  });
+}
+
+document.querySelectorAll(".profile").forEach(b => {
+  b.addEventListener("click", () => {
+    perfil = b.dataset.profile;
+    dia = 0;
+    salvar();
+    renderPerfis(); renderTrilha(); renderLicao();
+  });
+});
+
+el("finish").addEventListener("click", () => {
+  estado[perfil].dias[dia] = !estado[perfil].dias[dia];
+  salvar();
+  renderTrilha(); renderMedidor();
+});
+
+carregar();
+renderPerfis();
+renderTrilha();
+renderLicao();
+</script>
